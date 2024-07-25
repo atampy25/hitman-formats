@@ -1,0 +1,16 @@
+[package]
+name = "hitman-formats"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+indexmap = "2.2.6"
+thiserror = "1.0.61"
+tryvial = "0.2.0"
+hitman-commons = { git = "https://github.com/atampy25/hitman-commons" }
+hex = "0.4.3"
+
+[features]
+material = []
+ores = []
+wwev = []
