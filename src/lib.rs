@@ -1,5 +1,3 @@
-#![feature(cursor_remaining)]
-
 #[cfg(feature = "material")]
 pub mod material;
 
