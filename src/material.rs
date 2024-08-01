@@ -58,7 +58,7 @@ pub fn get_material_overrides(
 
 	let mut prop_names = vec![];
 
-	while !matb.is_empty() {
+	while matb.position() < (matb.get_ref().len() - 1) as u64 {
 		// All MATB entries are strings apparently so this type field is useless
 		let _ = {
 			let mut x = [0u8; 1];
@@ -81,7 +81,7 @@ pub fn get_material_overrides(
 
 	let mut cur_entry = 0;
 
-	while !matt.is_empty() {
+	while matt.position() < (matt.get_ref().len() - 1) as u64 {
 		let entry_type = {
 			let mut x = [0u8; 1];
 			matt.read_exact(&mut x)?;
