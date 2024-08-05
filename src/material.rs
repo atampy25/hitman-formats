@@ -1,6 +1,6 @@
 use std::io::{Cursor, Read};
 
-use hitman_commons::metadata::{ResourceID, ResourceReference};
+use hitman_commons::metadata::{RuntimeID, ResourceReference};
 use thiserror::Error;
 use tryvial::try_fn;
 
@@ -35,7 +35,7 @@ pub struct MaterialOverride {
 
 #[derive(Clone, Debug)]
 pub enum MaterialOverrideData {
-	Texture(Option<ResourceID>),
+	Texture(Option<RuntimeID>),
 	ColorRGB(f32, f32, f32),
 	ColorRGBA(f32, f32, f32, f32),
 	Float(f32),
