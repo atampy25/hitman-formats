@@ -345,8 +345,9 @@ pub struct Material {
 	#[cfg_attr(feature = "serde", serde(rename = "type"))]
 	pub material_type: MaterialType,
 
-	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-	pub tags: Option<String>,
+	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+	#[cfg_attr(feature = "serde", serde(default))]
+	pub tags: String,
 
 	pub class: Option<RuntimeID>,
 	pub descriptor: Option<RuntimeID>,
@@ -358,7 +359,6 @@ pub struct Material {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum MaterialType {
 	Standard,
@@ -857,7 +857,6 @@ pub struct RenderState {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum CullingMode {
 	DontCare,
@@ -889,7 +888,6 @@ impl Display for CullingMode {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum BlendMode {
 	Add,
@@ -1039,7 +1037,7 @@ impl Material {
 		Self {
 			name,
 			material_type: material_type.parse()?,
-			tags: (!tags.is_empty()).then_some(tags),
+			tags,
 			class: mati_references
 				.iter()
 				.enumerate()
