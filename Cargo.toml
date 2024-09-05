@@ -9,8 +9,10 @@ thiserror = "1.0.61"
 tryvial = "0.2.0"
 hitman-commons = { git = "https://github.com/atampy25/hitman-commons" }
 hex = "0.4.3"
+serde = { version = "1.0.208", optional = true }
 
 [features]
 material = []
 ores = []
 wwev = []
+serde = ["dep:serde", "hitman-commons/serde", "indexmap/serde"]
