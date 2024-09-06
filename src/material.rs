@@ -990,8 +990,7 @@ impl Material {
 				.collect()
 		)?;
 
-		// Texture count
-		let _ = u32::from_le_bytes({
+		let mate_index = u32::from_le_bytes({
 			let mut x = [0u8; 4];
 			mati.read_exact(&mut x)?;
 			x
@@ -1015,7 +1014,7 @@ impl Material {
 			x
 		});
 
-		// Skipped
+		// Skipped: lImpactMaterial, lEffectResource
 		let _ = {
 			let mut x = [0u8; 8];
 			mati.read_exact(&mut x)?;
@@ -1038,18 +1037,7 @@ impl Material {
 			name,
 			material_type: material_type.parse()?,
 			tags,
-			class: mati_references
-				.iter()
-				.enumerate()
-				.filter(|(ind, x)| {
-					*ind as u32 != eres_index
-						&& !binder.properties.iter().any(|(_, y)| match y {
-							MaterialPropertyValue::Texture { value, .. } => *value == Some(x.resource),
-							_ => false
-						})
-				})
-				.map(|(_, x)| x.resource)
-				.next(),
+			class: mati_references.get(mate_index as usize).map(|x| x.resource),
 			descriptor: mati_references.get(eres_index as usize).map(|x| x.resource),
 			class_flags: ClassFlags::from_u32(class_flags),
 			instance_flags: InstanceFlags::from_u32(instance_flags),
