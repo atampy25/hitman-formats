@@ -1062,7 +1062,7 @@ impl Material {
 			to_intermediate(self.binder)?,
 		]);
 
-		let (mut instance_data, instance_resources) = generate_property(&mut mati_references, instance)?;
+		let (mut instance_data, instance_resources) = generate_property(0, &mut mati_references, instance)?;
 		instance_data[4] = (mati.len() as u32 + 16).to_le_bytes()[0];
 		instance_data[5] = (mati.len() as u32 + 16).to_le_bytes()[1];
 		instance_data[6] = (mati.len() as u32 + 16).to_le_bytes()[2];
