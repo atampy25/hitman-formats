@@ -1,10 +1,12 @@
 use std::{
+	collections::HashMap,
 	fmt::Display,
-	io::{Cursor, Read, Seek, SeekFrom},
+	io::{Cursor, Read, Seek, SeekFrom, Write},
+	num::ParseIntError,
 	str::FromStr
 };
 
-use hitman_commons::metadata::{ResourceReference, RuntimeID};
+use hitman_commons::metadata::{ReferenceFlags, ReferenceType, ResourceReference, RuntimeID};
 use indexmap::IndexMap;
 use thiserror::Error;
 use tryvial::try_fn;
@@ -59,7 +61,10 @@ pub enum MaterialError {
 	InvalidCullingMode(String),
 
 	#[error("invalid blend mode: {0}")]
-	InvalidBlendMode(String)
+	InvalidBlendMode(String),
+
+	#[error("invalid hex: {0}")]
+	InvalidHex(#[from] ParseIntError)
 }
 
 #[derive(Clone, Debug)]
@@ -294,7 +299,7 @@ pub fn get_material_overrides(
 }
 
 #[derive(Clone, Debug)]
-enum IntermediateMaterialProperty {
+pub enum IntermediateMaterialProperty {
 	AlphaReference(u32),
 	AlphaTestEnabled(u32),
 	BlendEnabled(u32),
@@ -1044,6 +1049,267 @@ impl Material {
 			binder
 		}
 	}
+
+	#[try_fn]
+	pub fn generate(self) -> Result<(Vec<u8>, Vec<ResourceReference>)> {
+		let mut mati = vec![];
+		let mut mati_references = vec![];
+
+		// Generate instance data
+		let instance = IntermediateMaterialProperty::Instance(vec![
+			IntermediateMaterialProperty::Name(self.name),
+			IntermediateMaterialProperty::Tags(self.tags),
+			to_intermediate(self.binder)?,
+		]);
+
+		let (mut instance_data, instance_resources) = generate_property(&mut mati_references, instance)?;
+		instance_data[4] = (mati.len() as u32 + 16).to_le_bytes()[0];
+		instance_data[5] = (mati.len() as u32 + 16).to_le_bytes()[1];
+		instance_data[6] = (mati.len() as u32 + 16).to_le_bytes()[2];
+		instance_data[7] = (mati.len() as u32 + 16).to_le_bytes()[3];
+		mati.extend_from_slice(&instance_data);
+		if let Some(resources) = instance_resources {
+			mati.extend_from_slice(&resources);
+		}
+
+		(mati, mati_references)
+	}
+}
+
+#[try_fn]
+fn generate_property(
+	all_resources_offset: u32,
+	mati_references: &mut Vec<ResourceReference>,
+	property: IntermediateMaterialProperty
+) -> Result<(Vec<u8>, Option<Vec<u8>>)> {
+	match property {
+		IntermediateMaterialProperty::AlphaReference(val)
+		| IntermediateMaterialProperty::AlphaTestEnabled(val)
+		| IntermediateMaterialProperty::BlendEnabled(val)
+		| IntermediateMaterialProperty::DecalBlendDiffuse(val)
+		| IntermediateMaterialProperty::DecalBlendEmission(val)
+		| IntermediateMaterialProperty::DecalBlendNormal(val)
+		| IntermediateMaterialProperty::DecalBlendRoughness(val)
+		| IntermediateMaterialProperty::DecalBlendSpecular(val)
+		| IntermediateMaterialProperty::Enabled(val)
+		| IntermediateMaterialProperty::ZBias(val)
+		| IntermediateMaterialProperty::FogEnabled(val) => {
+			let name = match property {
+				IntermediateMaterialProperty::AlphaReference(_) => "AREF",
+				IntermediateMaterialProperty::AlphaTestEnabled(_) => "ATST",
+				IntermediateMaterialProperty::BlendEnabled(_) => "BENA",
+				IntermediateMaterialProperty::DecalBlendDiffuse(_) => "DBDE",
+				IntermediateMaterialProperty::DecalBlendEmission(_) => "DBEE",
+				IntermediateMaterialProperty::DecalBlendNormal(_) => "DBNE",
+				IntermediateMaterialProperty::DecalBlendRoughness(_) => "DBRE",
+				IntermediateMaterialProperty::DecalBlendSpecular(_) => "DBSE",
+				IntermediateMaterialProperty::Enabled(_) => "ENAB",
+				IntermediateMaterialProperty::ZBias(_) => "ZBIA",
+				IntermediateMaterialProperty::FogEnabled(_) => "FENA",
+				_ => unreachable!()
+			};
+
+			let mut data = vec![];
+
+			data.extend_from_slice(&{
+				let mut x = name.as_bytes().to_owned();
+				x.reverse();
+				x
+			});
+			data.extend_from_slice(&val.to_le_bytes());
+			data.extend_from_slice(&[1, 0, 0, 0]); // Count (1 for this type)
+			data.extend_from_slice(&[2, 0, 0, 0]); // Type (2 for int)
+
+			(data, None)
+		}
+
+		IntermediateMaterialProperty::BlendMode(ref val)
+		| IntermediateMaterialProperty::CullingMode(ref val)
+		| IntermediateMaterialProperty::Name(ref val)
+		| IntermediateMaterialProperty::Tags(ref val)
+		| IntermediateMaterialProperty::TilingU(ref val)
+		| IntermediateMaterialProperty::TilingV(ref val)
+		| IntermediateMaterialProperty::Type(ref val) => {
+			let name = match property {
+				IntermediateMaterialProperty::BlendMode(_) => "BMOD",
+				IntermediateMaterialProperty::CullingMode(_) => "CULL",
+				IntermediateMaterialProperty::Name(_) => "NAME",
+				IntermediateMaterialProperty::Tags(_) => "TAGS",
+				IntermediateMaterialProperty::TilingU(_) => "TILU",
+				IntermediateMaterialProperty::TilingV(_) => "TILV",
+				IntermediateMaterialProperty::Type(_) => "TYPE",
+				_ => unreachable!()
+			};
+
+			let mut data = vec![];
+
+			data.extend_from_slice(&{
+				let mut x = name.as_bytes().to_owned();
+				x.reverse();
+				x
+			});
+			data.extend_from_slice(&all_resources_offset.to_le_bytes()); // Pointer placeholder
+			data.extend_from_slice(&(val.len() as u32 + 1).to_le_bytes()); // Count (string length plus null terminator)
+			data.extend_from_slice(&[1, 0, 0, 0]); // Type (1 for string)
+
+			(data, Some([val.as_bytes(), &[0]].concat()))
+		}
+
+		IntermediateMaterialProperty::Binder(ref val)
+		| IntermediateMaterialProperty::Color(ref val)
+		| IntermediateMaterialProperty::Color4(ref val)
+		| IntermediateMaterialProperty::FloatValue(ref val)
+		| IntermediateMaterialProperty::Instance(ref val)
+		| IntermediateMaterialProperty::RenderState(ref val)
+		| IntermediateMaterialProperty::Texture(ref val) => {
+			let name = match property {
+				IntermediateMaterialProperty::Binder(_) => "BIND",
+				IntermediateMaterialProperty::Color(_) => "COLO",
+				IntermediateMaterialProperty::Color4(_) => "COL4",
+				IntermediateMaterialProperty::FloatValue(_) => "FLTV",
+				IntermediateMaterialProperty::Instance(_) => "INST",
+				IntermediateMaterialProperty::RenderState(_) => "RSTA",
+				IntermediateMaterialProperty::Texture(_) => "TEXT",
+				_ => unreachable!()
+			};
+
+			let mut data = vec![];
+
+			data.extend_from_slice(&{
+				let mut x = name.as_bytes().to_owned();
+				x.reverse();
+				x
+			});
+			data.extend_from_slice(&[0u8; 4]); // Pointer placeholder
+			data.extend_from_slice(&(val.len() as u32).to_le_bytes()); // Count
+			data.extend_from_slice(&[3, 0, 0, 0]); // Type (3 for pointer)
+
+			let mut records = vec![];
+			let mut resources = vec![];
+			for val in val.to_owned() {
+				let (mut record, resource) = generate_property(all_resources_offset, mati_references, val)?;
+
+				let new_pointer = (records.len() as u32 * 16
+					+ u32::from_le_bytes(record[4..8].try_into().unwrap())
+					+ resources.len() as u32)
+					.to_le_bytes();
+
+				record[4] = new_pointer[0];
+				record[5] = new_pointer[1];
+				record[6] = new_pointer[2];
+				record[7] = new_pointer[3];
+
+				records.push(record);
+
+				if let Some(res) = resource {
+					resources.push(res);
+				}
+			}
+
+			(data, Some([records, resources].concat().concat()))
+		}
+
+		IntermediateMaterialProperty::Opacity(val)
+		| IntermediateMaterialProperty::SubsurfaceValue(val)
+		| IntermediateMaterialProperty::SubsurfaceBlue(val)
+		| IntermediateMaterialProperty::SubsurfaceGreen(val)
+		| IntermediateMaterialProperty::SubsurfaceRed(val)
+		| IntermediateMaterialProperty::ZOffset(val) => {
+			let name = match property {
+				IntermediateMaterialProperty::Opacity(_) => "OPAC",
+				IntermediateMaterialProperty::ZOffset(_) => "ZOFF",
+				IntermediateMaterialProperty::SubsurfaceValue(_) => "SSBW",
+				IntermediateMaterialProperty::SubsurfaceBlue(_) => "SSVB",
+				IntermediateMaterialProperty::SubsurfaceGreen(_) => "SSVG",
+				IntermediateMaterialProperty::SubsurfaceRed(_) => "SSVR",
+				_ => unreachable!()
+			};
+
+			let mut data = vec![];
+
+			data.extend_from_slice(&{
+				let mut x = name.as_bytes().to_owned();
+				x.reverse();
+				x
+			});
+			data.extend_from_slice(&val.to_le_bytes());
+			data.extend_from_slice(&[1, 0, 0, 0]); // Count (1 for this type)
+			data.extend_from_slice(&[0, 0, 0, 0]); // Type (0 for float)
+
+			(data, None)
+		}
+
+		IntermediateMaterialProperty::TextureID(val) => {
+			let name = "TXID";
+
+			let mut data = vec![];
+
+			data.extend_from_slice(&{
+				let mut x = name.as_bytes().to_owned();
+				x.reverse();
+				x
+			});
+
+			if let Some(id) = val {
+				mati_references.push(ResourceReference {
+					resource: id,
+					flags: ReferenceFlags {
+						reference_type: ReferenceType::Normal,
+						acquired: false,
+						language_code: 0b0001_1111
+					}
+				});
+
+				data.extend_from_slice(&((mati_references.len() - 1) as u32).to_le_bytes());
+			} else {
+				data.extend_from_slice(&u32::MAX.to_le_bytes());
+			}
+
+			data.extend_from_slice(&[1, 0, 0, 0]); // Count (1 for this type)
+			data.extend_from_slice(&[2, 0, 0, 0]); // Type (2 for int)
+
+			(data, None)
+		}
+
+		IntermediateMaterialProperty::Value(val) => {
+			let name = "VALU";
+
+			match val {
+				FloatVal::Single(val) => {
+					let mut data = vec![];
+
+					data.extend_from_slice(&{
+						let mut x = name.as_bytes().to_owned();
+						x.reverse();
+						x
+					});
+					data.extend_from_slice(&val.to_le_bytes());
+					data.extend_from_slice(&[1, 0, 0, 0]); // Count (1 for this type)
+					data.extend_from_slice(&[0, 0, 0, 0]); // Type (0 for float)
+
+					(data, None)
+				}
+
+				FloatVal::Vector(val) => {
+					let mut data = vec![];
+
+					data.extend_from_slice(&{
+						let mut x = name.as_bytes().to_owned();
+						x.reverse();
+						x
+					});
+					data.extend_from_slice(&all_resources_offset.to_le_bytes()); // Pointer placeholder
+					data.extend_from_slice(&(val.len() as u32).to_le_bytes()); // Count
+					data.extend_from_slice(&[0, 0, 0, 0]); // Type (0 for float)
+
+					(
+						data,
+						Some(val.into_iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>())
+					)
+				}
+			}
+		}
+	}
 }
 
 #[try_fn]
@@ -1544,4 +1810,169 @@ fn parse_instance(instance: IntermediateMaterialProperty) -> Result<(String, Str
 }
 
 #[try_fn]
-fn to_intermediate(binder: Binder) -> Result<IntermediateMaterialProperty> {}
+fn to_intermediate(binder: Binder) -> Result<IntermediateMaterialProperty> {
+	IntermediateMaterialProperty::Binder(
+		[
+			vec![IntermediateMaterialProperty::RenderState({
+				let mut props = Vec::new();
+
+				if let Some(enabled) = binder.render_state.enabled {
+					props.push(IntermediateMaterialProperty::Enabled(if enabled { 1 } else { 0 }));
+				}
+
+				if let Some(blend_enabled) = binder.render_state.blend_enabled {
+					props.push(IntermediateMaterialProperty::BlendEnabled(if blend_enabled {
+						1
+					} else {
+						0
+					}));
+				}
+
+				if let Some(blend_mode) = &binder.render_state.blend_mode {
+					props.push(IntermediateMaterialProperty::BlendMode(blend_mode.to_string()));
+				}
+
+				if let Some(decal_blend_diffuse) = binder.render_state.decal_blend_diffuse {
+					props.push(IntermediateMaterialProperty::DecalBlendDiffuse(decal_blend_diffuse));
+				}
+
+				if let Some(decal_blend_normal) = binder.render_state.decal_blend_normal {
+					props.push(IntermediateMaterialProperty::DecalBlendNormal(decal_blend_normal));
+				}
+
+				if let Some(decal_blend_specular) = binder.render_state.decal_blend_specular {
+					props.push(IntermediateMaterialProperty::DecalBlendSpecular(decal_blend_specular));
+				}
+
+				if let Some(decal_blend_roughness) = binder.render_state.decal_blend_roughness {
+					props.push(IntermediateMaterialProperty::DecalBlendRoughness(decal_blend_roughness));
+				}
+
+				if let Some(decal_blend_emission) = binder.render_state.decal_blend_emission {
+					props.push(IntermediateMaterialProperty::DecalBlendEmission(decal_blend_emission));
+				}
+
+				if let Some(alpha_test_enabled) = binder.render_state.alpha_test_enabled {
+					props.push(IntermediateMaterialProperty::AlphaTestEnabled(if alpha_test_enabled {
+						1
+					} else {
+						0
+					}));
+				}
+
+				if let Some(alpha_reference) = binder.render_state.alpha_reference {
+					props.push(IntermediateMaterialProperty::AlphaReference(alpha_reference));
+				}
+
+				if let Some(fog_enabled) = binder.render_state.fog_enabled {
+					props.push(IntermediateMaterialProperty::FogEnabled(if fog_enabled {
+						1
+					} else {
+						0
+					}));
+				}
+
+				if let Some(opacity) = binder.render_state.opacity {
+					props.push(IntermediateMaterialProperty::Opacity(opacity));
+				}
+
+				props.push(IntermediateMaterialProperty::CullingMode(
+					binder.render_state.culling_mode.to_string()
+				));
+
+				if let Some(z_bias) = binder.render_state.z_bias {
+					props.push(IntermediateMaterialProperty::ZBias(z_bias));
+				}
+
+				if let Some(z_offset) = binder.render_state.z_offset {
+					props.push(IntermediateMaterialProperty::ZOffset(z_offset));
+				}
+
+				if let Some(subsurface_red) = binder.render_state.subsurface_red {
+					props.push(IntermediateMaterialProperty::SubsurfaceRed(subsurface_red));
+				}
+
+				if let Some(subsurface_green) = binder.render_state.subsurface_green {
+					props.push(IntermediateMaterialProperty::SubsurfaceGreen(subsurface_green));
+				}
+
+				if let Some(subsurface_blue) = binder.render_state.subsurface_blue {
+					props.push(IntermediateMaterialProperty::SubsurfaceBlue(subsurface_blue));
+				}
+
+				if let Some(subsurface_value) = binder.render_state.subsurface_value {
+					props.push(IntermediateMaterialProperty::SubsurfaceValue(subsurface_value));
+				}
+
+				props
+			})],
+			binder
+				.properties
+				.into_iter()
+				.map(|(name, value)| {
+					Ok({
+						match value {
+							MaterialPropertyValue::Float { enabled, value } => {
+								IntermediateMaterialProperty::FloatValue(vec![
+									IntermediateMaterialProperty::Name(name),
+									IntermediateMaterialProperty::Enabled(if enabled { 1 } else { 0 }),
+									IntermediateMaterialProperty::Value(FloatVal::Single(value)),
+								])
+							}
+
+							MaterialPropertyValue::Vector { enabled, value } => {
+								IntermediateMaterialProperty::FloatValue(vec![
+									IntermediateMaterialProperty::Name(name),
+									IntermediateMaterialProperty::Enabled(if enabled { 1 } else { 0 }),
+									IntermediateMaterialProperty::Value(FloatVal::Vector(value)),
+								])
+							}
+
+							MaterialPropertyValue::Texture {
+								enabled,
+								value,
+								tiling_u,
+								tiling_v,
+								texture_type
+							} => IntermediateMaterialProperty::Texture(vec![
+								IntermediateMaterialProperty::Name(name),
+								IntermediateMaterialProperty::Enabled(if enabled { 1 } else { 0 }),
+								IntermediateMaterialProperty::TextureID(value),
+								IntermediateMaterialProperty::TilingU(tiling_u),
+								IntermediateMaterialProperty::TilingV(tiling_v),
+								IntermediateMaterialProperty::Type(texture_type),
+							]),
+
+							MaterialPropertyValue::Colour { enabled, value } => {
+								let mut chars = value[1..].chars();
+								let r = u8::from_str_radix(&chars.next().unwrap().to_string(), 16)? as f32 / 15.0;
+								let g = u8::from_str_radix(&chars.next().unwrap().to_string(), 16)? as f32 / 15.0;
+								let b = u8::from_str_radix(&chars.next().unwrap().to_string(), 16)? as f32 / 15.0;
+								let a = if value.len() > 7 {
+									u8::from_str_radix(&chars.next().unwrap().to_string(), 16)? as f32 / 15.0
+								} else {
+									1.0
+								};
+
+								if value.len() > 7 {
+									IntermediateMaterialProperty::Color4(vec![
+										IntermediateMaterialProperty::Name(name),
+										IntermediateMaterialProperty::Enabled(if enabled { 1 } else { 0 }),
+										IntermediateMaterialProperty::Value(FloatVal::Vector(vec![r, g, b, a])),
+									])
+								} else {
+									IntermediateMaterialProperty::Color(vec![
+										IntermediateMaterialProperty::Name(name),
+										IntermediateMaterialProperty::Enabled(if enabled { 1 } else { 0 }),
+										IntermediateMaterialProperty::Value(FloatVal::Vector(vec![r, g, b])),
+									])
+								}
+							}
+						}
+					})
+				})
+				.collect::<Result<Vec<_>>>()?
+		]
+		.concat()
+	)
+}
