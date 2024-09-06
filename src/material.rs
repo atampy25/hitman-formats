@@ -47,7 +47,7 @@ pub enum MaterialError {
 	RequiredPropertyNotFound(String),
 
 	#[error("property at wrong level")]
-	PropertyAtWrongLevel(ParsedMaterialProperty),
+	PropertyAtWrongLevel(IntermediateMaterialProperty),
 
 	#[error("float vector of correct size for colour expected for property {0}")]
 	InvalidColor(String),
@@ -294,14 +294,14 @@ pub fn get_material_overrides(
 }
 
 #[derive(Clone, Debug)]
-pub enum ParsedMaterialProperty {
+enum IntermediateMaterialProperty {
 	AlphaReference(u32),
 	AlphaTestEnabled(u32),
 	BlendEnabled(u32),
-	Binder(Vec<ParsedMaterialProperty>),
+	Binder(Vec<IntermediateMaterialProperty>),
 	BlendMode(String),
-	Color(Vec<ParsedMaterialProperty>),
-	Color4(Vec<ParsedMaterialProperty>),
+	Color(Vec<IntermediateMaterialProperty>),
+	Color4(Vec<IntermediateMaterialProperty>),
 	CullingMode(String),
 	DecalBlendDiffuse(u32),
 	DecalBlendEmission(u32),
@@ -310,17 +310,17 @@ pub enum ParsedMaterialProperty {
 	DecalBlendSpecular(u32),
 	Enabled(u32),
 	FogEnabled(u32),
-	FloatValue(Vec<ParsedMaterialProperty>),
-	Instance(Vec<ParsedMaterialProperty>),
+	FloatValue(Vec<IntermediateMaterialProperty>),
+	Instance(Vec<IntermediateMaterialProperty>),
 	Name(String),
 	Opacity(f32),
-	RenderState(Vec<ParsedMaterialProperty>),
+	RenderState(Vec<IntermediateMaterialProperty>),
 	SubsurfaceValue(f32),
 	SubsurfaceBlue(f32),
 	SubsurfaceGreen(f32),
 	SubsurfaceRed(f32),
 	Tags(String),
-	Texture(Vec<ParsedMaterialProperty>),
+	Texture(Vec<IntermediateMaterialProperty>),
 	TilingU(String),
 	TilingV(String),
 	TextureID(Option<RuntimeID>),
@@ -1051,7 +1051,7 @@ fn parse_material_property(
 	mati_data: &[u8],
 	mati_references: &[ResourceReference],
 	start: u64
-) -> Result<ParsedMaterialProperty> {
+) -> Result<IntermediateMaterialProperty> {
 	let mut mati = Cursor::new(mati_data);
 	mati.seek(SeekFrom::Start(start))?;
 
@@ -1088,13 +1088,13 @@ fn parse_material_property(
 				let value = f32::from_le_bytes(data);
 
 				match name.as_ref() {
-					"OPAC" => ParsedMaterialProperty::Opacity(value),
-					"ZOFF" => ParsedMaterialProperty::ZOffset(value),
-					"SSBW" => ParsedMaterialProperty::SubsurfaceValue(value),
-					"SSVB" => ParsedMaterialProperty::SubsurfaceBlue(value),
-					"SSVG" => ParsedMaterialProperty::SubsurfaceGreen(value),
-					"SSVR" => ParsedMaterialProperty::SubsurfaceRed(value),
-					"VALU" => ParsedMaterialProperty::Value(FloatVal::Single(value)),
+					"OPAC" => IntermediateMaterialProperty::Opacity(value),
+					"ZOFF" => IntermediateMaterialProperty::ZOffset(value),
+					"SSBW" => IntermediateMaterialProperty::SubsurfaceValue(value),
+					"SSVB" => IntermediateMaterialProperty::SubsurfaceBlue(value),
+					"SSVG" => IntermediateMaterialProperty::SubsurfaceGreen(value),
+					"SSVR" => IntermediateMaterialProperty::SubsurfaceRed(value),
+					"VALU" => IntermediateMaterialProperty::Value(FloatVal::Single(value)),
 
 					_ => return Err(MaterialError::IncorrectType(name, ty))
 				}
@@ -1112,7 +1112,7 @@ fn parse_material_property(
 				}
 
 				match name.as_ref() {
-					"VALU" => ParsedMaterialProperty::Value(FloatVal::Vector(value)),
+					"VALU" => IntermediateMaterialProperty::Value(FloatVal::Vector(value)),
 
 					_ => return Err(MaterialError::IncorrectType(name, ty))
 				}
@@ -1131,13 +1131,13 @@ fn parse_material_property(
 			)?;
 
 			match name.as_ref() {
-				"BMOD" => ParsedMaterialProperty::BlendMode(value),
-				"CULL" => ParsedMaterialProperty::CullingMode(value),
-				"NAME" => ParsedMaterialProperty::Name(value),
-				"TAGS" => ParsedMaterialProperty::Tags(value),
-				"TILU" => ParsedMaterialProperty::TilingU(value),
-				"TILV" => ParsedMaterialProperty::TilingV(value),
-				"TYPE" => ParsedMaterialProperty::Type(value),
+				"BMOD" => IntermediateMaterialProperty::BlendMode(value),
+				"CULL" => IntermediateMaterialProperty::CullingMode(value),
+				"NAME" => IntermediateMaterialProperty::Name(value),
+				"TAGS" => IntermediateMaterialProperty::Tags(value),
+				"TILU" => IntermediateMaterialProperty::TilingU(value),
+				"TILV" => IntermediateMaterialProperty::TilingV(value),
+				"TYPE" => IntermediateMaterialProperty::Type(value),
 
 				_ => return Err(MaterialError::IncorrectType(name, ty))
 			}
@@ -1148,19 +1148,19 @@ fn parse_material_property(
 			let value = u32::from_le_bytes(data);
 
 			match name.as_ref() {
-				"AREF" => ParsedMaterialProperty::AlphaReference(value),
-				"ATST" => ParsedMaterialProperty::AlphaTestEnabled(value),
-				"BENA" => ParsedMaterialProperty::BlendEnabled(value),
-				"DBDE" => ParsedMaterialProperty::DecalBlendDiffuse(value),
-				"DBEE" => ParsedMaterialProperty::DecalBlendEmission(value),
-				"DBNE" => ParsedMaterialProperty::DecalBlendNormal(value),
-				"DBRE" => ParsedMaterialProperty::DecalBlendRoughness(value),
-				"DBSE" => ParsedMaterialProperty::DecalBlendSpecular(value),
-				"ENAB" => ParsedMaterialProperty::Enabled(value),
-				"FENA" => ParsedMaterialProperty::FogEnabled(value),
-				"ZBIA" => ParsedMaterialProperty::ZBias(value),
+				"AREF" => IntermediateMaterialProperty::AlphaReference(value),
+				"ATST" => IntermediateMaterialProperty::AlphaTestEnabled(value),
+				"BENA" => IntermediateMaterialProperty::BlendEnabled(value),
+				"DBDE" => IntermediateMaterialProperty::DecalBlendDiffuse(value),
+				"DBEE" => IntermediateMaterialProperty::DecalBlendEmission(value),
+				"DBNE" => IntermediateMaterialProperty::DecalBlendNormal(value),
+				"DBRE" => IntermediateMaterialProperty::DecalBlendRoughness(value),
+				"DBSE" => IntermediateMaterialProperty::DecalBlendSpecular(value),
+				"ENAB" => IntermediateMaterialProperty::Enabled(value),
+				"FENA" => IntermediateMaterialProperty::FogEnabled(value),
+				"ZBIA" => IntermediateMaterialProperty::ZBias(value),
 
-				"TXID" => ParsedMaterialProperty::TextureID(if value != 4294967295 {
+				"TXID" => IntermediateMaterialProperty::TextureID(if value != 4294967295 {
 					Some(
 						mati_references
 							.get(value as usize)
@@ -1186,13 +1186,13 @@ fn parse_material_property(
 			}
 
 			match name.as_ref() {
-				"BIND" => ParsedMaterialProperty::Binder(values),
-				"COLO" => ParsedMaterialProperty::Color(values),
-				"COL4" => ParsedMaterialProperty::Color4(values),
-				"FLTV" => ParsedMaterialProperty::FloatValue(values),
-				"INST" => ParsedMaterialProperty::Instance(values),
-				"RSTA" => ParsedMaterialProperty::RenderState(values),
-				"TEXT" => ParsedMaterialProperty::Texture(values),
+				"BIND" => IntermediateMaterialProperty::Binder(values),
+				"COLO" => IntermediateMaterialProperty::Color(values),
+				"COL4" => IntermediateMaterialProperty::Color4(values),
+				"FLTV" => IntermediateMaterialProperty::FloatValue(values),
+				"INST" => IntermediateMaterialProperty::Instance(values),
+				"RSTA" => IntermediateMaterialProperty::RenderState(values),
+				"TEXT" => IntermediateMaterialProperty::Texture(values),
 
 				_ => return Err(MaterialError::IncorrectType(name, ty))
 			}
@@ -1203,8 +1203,8 @@ fn parse_material_property(
 }
 
 #[try_fn]
-fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, Binder)> {
-	let ParsedMaterialProperty::Instance(properties) = instance else {
+fn parse_instance(instance: IntermediateMaterialProperty) -> Result<(String, String, Binder)> {
+	let IntermediateMaterialProperty::Instance(properties) = instance else {
 		return Err(MaterialError::InstanceNotTopLevel);
 	};
 
@@ -1212,7 +1212,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 		properties
 			.iter()
 			.find_map(|x| match x {
-				ParsedMaterialProperty::Name(x) => Some(x),
+				IntermediateMaterialProperty::Name(x) => Some(x),
 				_ => None
 			})
 			.ok_or_else(|| MaterialError::RequiredPropertyNotFound("NAME".into()))?
@@ -1220,7 +1220,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 		properties
 			.iter()
 			.find_map(|x| match x {
-				ParsedMaterialProperty::Tags(x) => Some(x),
+				IntermediateMaterialProperty::Tags(x) => Some(x),
 				_ => None
 			})
 			.ok_or_else(|| MaterialError::RequiredPropertyNotFound("TAGS".into()))?
@@ -1229,7 +1229,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 			let binder = properties
 				.iter()
 				.find_map(|x| match x {
-					ParsedMaterialProperty::Binder(x) => Some(x),
+					IntermediateMaterialProperty::Binder(x) => Some(x),
 					_ => None
 				})
 				.ok_or_else(|| MaterialError::RequiredPropertyNotFound("BIND".into()))?;
@@ -1239,7 +1239,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 					let props = binder
 						.iter()
 						.find_map(|x| match x {
-							ParsedMaterialProperty::RenderState(x) => Some(x),
+							IntermediateMaterialProperty::RenderState(x) => Some(x),
 							_ => None
 						})
 						.ok_or_else(|| MaterialError::RequiredPropertyNotFound("RSTA".into()))?
@@ -1247,86 +1247,86 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 
 					RenderState {
 						enabled: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::Enabled(x) => Some(x != 0),
+							IntermediateMaterialProperty::Enabled(x) => Some(x != 0),
 							_ => None
 						}),
 						blend_enabled: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::BlendEnabled(x) => Some(x != 0),
+							IntermediateMaterialProperty::BlendEnabled(x) => Some(x != 0),
 							_ => None
 						}),
 						blend_mode: props
 							.iter()
 							.find_map(|x| match *x {
-								ParsedMaterialProperty::BlendMode(ref x) => Some(x.parse()),
+								IntermediateMaterialProperty::BlendMode(ref x) => Some(x.parse()),
 								_ => None
 							})
 							.transpose()?,
 						decal_blend_diffuse: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::DecalBlendDiffuse(x) => Some(x),
+							IntermediateMaterialProperty::DecalBlendDiffuse(x) => Some(x),
 							_ => None
 						}),
 						decal_blend_normal: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::DecalBlendNormal(x) => Some(x),
+							IntermediateMaterialProperty::DecalBlendNormal(x) => Some(x),
 							_ => None
 						}),
 						decal_blend_specular: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::DecalBlendSpecular(x) => Some(x),
+							IntermediateMaterialProperty::DecalBlendSpecular(x) => Some(x),
 							_ => None
 						}),
 						decal_blend_roughness: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::DecalBlendRoughness(x) => Some(x),
+							IntermediateMaterialProperty::DecalBlendRoughness(x) => Some(x),
 							_ => None
 						}),
 						decal_blend_emission: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::DecalBlendEmission(x) => Some(x),
+							IntermediateMaterialProperty::DecalBlendEmission(x) => Some(x),
 							_ => None
 						}),
 						alpha_test_enabled: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::AlphaTestEnabled(x) => Some(x != 0),
+							IntermediateMaterialProperty::AlphaTestEnabled(x) => Some(x != 0),
 							_ => None
 						}),
 						alpha_reference: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::AlphaReference(x) => Some(x),
+							IntermediateMaterialProperty::AlphaReference(x) => Some(x),
 							_ => None
 						}),
 						fog_enabled: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::FogEnabled(x) => Some(x != 0),
+							IntermediateMaterialProperty::FogEnabled(x) => Some(x != 0),
 							_ => None
 						}),
 						opacity: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::Opacity(x) => Some(x),
+							IntermediateMaterialProperty::Opacity(x) => Some(x),
 							_ => None
 						}),
 						culling_mode: props
 							.iter()
 							.find_map(|x| match *x {
-								ParsedMaterialProperty::CullingMode(ref x) => Some(x.parse()),
+								IntermediateMaterialProperty::CullingMode(ref x) => Some(x.parse()),
 								_ => None
 							})
 							.transpose()?
 							.ok_or_else(|| MaterialError::RequiredPropertyNotFound("CULL".into()))?,
 						z_bias: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::ZBias(x) => Some(x),
+							IntermediateMaterialProperty::ZBias(x) => Some(x),
 							_ => None
 						}),
 						z_offset: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::ZOffset(x) => Some(x),
+							IntermediateMaterialProperty::ZOffset(x) => Some(x),
 							_ => None
 						}),
 						subsurface_red: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::SubsurfaceRed(x) => Some(x),
+							IntermediateMaterialProperty::SubsurfaceRed(x) => Some(x),
 							_ => None
 						}),
 						subsurface_green: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::SubsurfaceGreen(x) => Some(x),
+							IntermediateMaterialProperty::SubsurfaceGreen(x) => Some(x),
 							_ => None
 						}),
 						subsurface_blue: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::SubsurfaceBlue(x) => Some(x),
+							IntermediateMaterialProperty::SubsurfaceBlue(x) => Some(x),
 							_ => None
 						}),
 						subsurface_value: props.iter().find_map(|x| match *x {
-							ParsedMaterialProperty::SubsurfaceValue(x) => Some(x),
+							IntermediateMaterialProperty::SubsurfaceValue(x) => Some(x),
 							_ => None
 						})
 					}
@@ -1334,14 +1334,14 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 
 				properties: binder
 					.iter()
-					.filter(|x| !matches!(x, ParsedMaterialProperty::RenderState(_)))
+					.filter(|x| !matches!(x, IntermediateMaterialProperty::RenderState(_)))
 					.map(|x| {
 						Ok(match x {
-							ParsedMaterialProperty::FloatValue(x) => {
+							IntermediateMaterialProperty::FloatValue(x) => {
 								let name = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Name(x) => Some(x),
+										IntermediateMaterialProperty::Name(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("NAME".into()))?;
@@ -1349,7 +1349,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let enabled = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Enabled(x) => Some(x),
+										IntermediateMaterialProperty::Enabled(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("ENAB".into()))?;
@@ -1357,7 +1357,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let value = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Value(x) => Some(x),
+										IntermediateMaterialProperty::Value(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("VALU".into()))?;
@@ -1378,11 +1378,11 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								)
 							}
 
-							ParsedMaterialProperty::Texture(x) => {
+							IntermediateMaterialProperty::Texture(x) => {
 								let name = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Name(x) => Some(x),
+										IntermediateMaterialProperty::Name(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("NAME".into()))?;
@@ -1390,7 +1390,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let enabled = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Enabled(x) => Some(x),
+										IntermediateMaterialProperty::Enabled(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("ENAB".into()))?;
@@ -1398,7 +1398,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let tiling_u = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::TilingU(x) => Some(x),
+										IntermediateMaterialProperty::TilingU(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("TILU".into()))?;
@@ -1406,7 +1406,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let tiling_v = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::TilingV(x) => Some(x),
+										IntermediateMaterialProperty::TilingV(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("TILV".into()))?;
@@ -1414,7 +1414,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let texture_id = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::TextureID(x) => Some(x),
+										IntermediateMaterialProperty::TextureID(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("TXID".into()))?;
@@ -1422,7 +1422,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let texture_type = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Type(x) => Some(x),
+										IntermediateMaterialProperty::Type(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("TYPE".into()))?;
@@ -1439,11 +1439,11 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								)
 							}
 
-							ParsedMaterialProperty::Color(x) => {
+							IntermediateMaterialProperty::Color(x) => {
 								let name = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Name(x) => Some(x),
+										IntermediateMaterialProperty::Name(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("NAME".into()))?;
@@ -1451,7 +1451,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let enabled = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Enabled(x) => Some(x),
+										IntermediateMaterialProperty::Enabled(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("ENAB".into()))?;
@@ -1459,7 +1459,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let value = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Value(x) => Some(x),
+										IntermediateMaterialProperty::Value(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("VALU".into()))?;
@@ -1486,11 +1486,11 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								)
 							}
 
-							ParsedMaterialProperty::Color4(x) => {
+							IntermediateMaterialProperty::Color4(x) => {
 								let name = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Name(x) => Some(x),
+										IntermediateMaterialProperty::Name(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("NAME".into()))?;
@@ -1498,7 +1498,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let enabled = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Enabled(x) => Some(x),
+										IntermediateMaterialProperty::Enabled(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("ENAB".into()))?;
@@ -1506,7 +1506,7 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 								let value = x
 									.iter()
 									.find_map(|x| match x {
-										ParsedMaterialProperty::Value(x) => Some(x),
+										IntermediateMaterialProperty::Value(x) => Some(x),
 										_ => None
 									})
 									.ok_or_else(|| MaterialError::RequiredPropertyNotFound("VALU".into()))?;
@@ -1542,3 +1542,6 @@ fn parse_instance(instance: ParsedMaterialProperty) -> Result<(String, String, B
 		}
 	)
 }
+
+#[try_fn]
+fn to_intermediate(binder: Binder) -> Result<IntermediateMaterialProperty> {}
