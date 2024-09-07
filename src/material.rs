@@ -1,7 +1,6 @@
 use std::{
-	collections::HashMap,
 	fmt::Display,
-	io::{Cursor, Read, Seek, SeekFrom, Write},
+	io::{Cursor, Read, Seek, SeekFrom},
 	num::ParseIntError,
 	str::FromStr
 };
@@ -67,13 +66,13 @@ pub enum MaterialError {
 	InvalidHex(#[from] ParseIntError)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MaterialOverride {
 	pub name: String,
 	pub data: MaterialOverrideData
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MaterialOverrideData {
 	Texture(Option<RuntimeID>),
 	ColorRGB(f32, f32, f32),
@@ -298,7 +297,7 @@ pub fn get_material_overrides(
 	properties
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum IntermediateMaterialProperty {
 	AlphaReference(u32),
 	AlphaTestEnabled(u32),
@@ -335,7 +334,7 @@ pub enum IntermediateMaterialProperty {
 	ZOffset(f32)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FloatVal {
 	Single(f32),
 	Vector(Vec<f32>)
@@ -343,7 +342,7 @@ pub enum FloatVal {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Material {
 	pub name: String,
 
@@ -794,7 +793,7 @@ impl InstanceFlags {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Binder {
 	pub render_state: RenderState,
 	pub properties: IndexMap<String, MaterialPropertyValue>
@@ -802,8 +801,12 @@ pub struct Binder {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RenderState {
+	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "is_default_renderstate"))]
+	#[cfg_attr(feature = "serde", serde(default = "default_renderstate"))]
+	pub name: Option<String>,
+
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
 	pub enabled: Option<bool>,
 
@@ -859,6 +862,14 @@ pub struct RenderState {
 
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
 	pub subsurface_value: Option<f32>
+}
+
+fn is_default_renderstate(value: &Option<String>) -> bool {
+	*value == Some("RenderState".to_owned()) || value.is_none()
+}
+
+fn default_renderstate() -> Option<String> {
+	Some("RenderState".to_owned())
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -934,7 +945,7 @@ impl Display for BlendMode {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MaterialPropertyValue {
 	Float {
 		enabled: bool,
@@ -1055,6 +1066,14 @@ impl Material {
 		let mut mati = vec![];
 		let mut mati_references = vec![];
 
+		// Header offset (placeholder)
+		mati.extend_from_slice(&0u32.to_le_bytes());
+
+		// Alignment
+		while mati.len() % 16 != 0 {
+			mati.push(0u8);
+		}
+
 		// Generate instance data
 		let instance = IntermediateMaterialProperty::Instance(vec![
 			IntermediateMaterialProperty::Name(self.name),
@@ -1062,15 +1081,91 @@ impl Material {
 			to_intermediate(self.binder)?,
 		]);
 
-		let (mut instance_data, instance_resources) = generate_property(0, &mut mati_references, instance)?;
-		instance_data[4] = (mati.len() as u32 + 16).to_le_bytes()[0];
-		instance_data[5] = (mati.len() as u32 + 16).to_le_bytes()[1];
-		instance_data[6] = (mati.len() as u32 + 16).to_le_bytes()[2];
-		instance_data[7] = (mati.len() as u32 + 16).to_le_bytes()[3];
+		let (instance_data, instance_resources) = generate_property(mati.len() as u32, &mut mati_references, instance)?;
+
+		let Some(resources) = instance_resources else {
+			unreachable!()
+		};
+
+		mati.extend_from_slice(&resources);
+
+		// Update the instance offset
+		let instance_offset = mati.len() as u32;
+
 		mati.extend_from_slice(&instance_data);
-		if let Some(resources) = instance_resources {
-			mati.extend_from_slice(&resources);
+
+		// Update the type offset
+		let type_offset = mati.len() as u32;
+
+		mati.extend_from_slice(&[self.material_type.to_string().as_bytes(), &[0]].concat());
+
+		// Alignment
+		while mati.len() % 16 != 0 {
+			mati.push(0u8);
 		}
+
+		// Update header offset
+		mati[0] = (mati.len() as u32).to_le_bytes()[0];
+		mati[1] = (mati.len() as u32).to_le_bytes()[1];
+		mati[2] = (mati.len() as u32).to_le_bytes()[2];
+		mati[3] = (mati.len() as u32).to_le_bytes()[3];
+
+		// Type offset
+		mati.extend_from_slice(&type_offset.to_le_bytes());
+
+		if let Some(class) = self.class {
+			mati_references.push(ResourceReference {
+				resource: class,
+				flags: ReferenceFlags {
+					reference_type: ReferenceType::Install,
+					acquired: false,
+					language_code: 0b0001_1111
+				}
+			});
+
+			// MATE index
+			mati.extend_from_slice(&(mati_references.len() as u32 - 1).to_le_bytes());
+		} else {
+			// MATE index
+			mati.extend_from_slice(&u32::MAX.to_le_bytes());
+		}
+
+		// Class flags
+		mati.extend_from_slice(&self.class_flags.as_u32().to_le_bytes());
+
+		// Instance flags
+		mati.extend_from_slice(&self.instance_flags.as_u32().to_le_bytes());
+
+		if let Some(descriptor) = self.descriptor {
+			mati_references.push(ResourceReference {
+				resource: descriptor,
+				flags: ReferenceFlags {
+					reference_type: ReferenceType::Normal,
+					acquired: false,
+					language_code: 0b0001_1111
+				}
+			});
+
+			// ERES index
+			mati.extend_from_slice(&(mati_references.len() as u32 - 1).to_le_bytes());
+		} else {
+			// ERES index
+			mati.extend_from_slice(&u32::MAX.to_le_bytes());
+		}
+
+		// Skipped: lImpactMaterial, lEffectResource
+		mati.extend_from_slice(&[0u8; 8]);
+
+		// Instance offset
+		mati.extend_from_slice(&instance_offset.to_le_bytes());
+
+		// Constant: 3
+		mati.extend_from_slice(&3u32.to_le_bytes());
+
+		// 12 zero bytes
+		mati.extend_from_slice(&0u32.to_le_bytes());
+		mati.extend_from_slice(&0u32.to_le_bytes());
+		mati.extend_from_slice(&0u32.to_le_bytes());
 
 		(mati, mati_references)
 	}
@@ -1152,7 +1247,14 @@ fn generate_property(
 			data.extend_from_slice(&(val.len() as u32 + 1).to_le_bytes()); // Count (string length plus null terminator)
 			data.extend_from_slice(&[1, 0, 0, 0]); // Type (1 for string)
 
-			(data, Some([val.as_bytes(), &[0]].concat()))
+			let mut resources = [val.as_bytes(), &[0]].concat();
+
+			// Alignment
+			while resources.len() % 16 != 0 {
+				resources.push(0u8);
+			}
+
+			(data, Some(resources))
 		}
 
 		IntermediateMaterialProperty::Binder(ref val)
@@ -1173,6 +1275,31 @@ fn generate_property(
 				_ => unreachable!()
 			};
 
+			let mut records = vec![];
+			let mut resources = vec![];
+			for sub_property in val.iter().cloned() {
+				let (record, resource) = generate_property(
+					all_resources_offset + (resources.len() as u32),
+					mati_references,
+					sub_property
+				)?;
+
+				records.extend(record);
+
+				if let Some(res) = resource {
+					resources.extend(res);
+				}
+			}
+
+			let resource_chunk_size = resources.len() as u32;
+
+			let mut resources_concat = [resources, records].concat();
+
+			// Alignment
+			while resources_concat.len() % 16 != 0 {
+				resources_concat.push(0u8);
+			}
+
 			let mut data = vec![];
 
 			data.extend_from_slice(&{
@@ -1180,33 +1307,11 @@ fn generate_property(
 				x.reverse();
 				x
 			});
-			data.extend_from_slice(&[0u8; 4]); // Pointer placeholder
+			data.extend_from_slice(&(all_resources_offset + resource_chunk_size).to_le_bytes()); // Pointer
 			data.extend_from_slice(&(val.len() as u32).to_le_bytes()); // Count
-			data.extend_from_slice(&[3, 0, 0, 0]); // Type (3 for pointer)
+			data.extend_from_slice(&[3, 0, 0, 0]); // Type (3 for property)
 
-			let mut records = vec![];
-			let mut resources = vec![];
-			for val in val.to_owned() {
-				let (mut record, resource) = generate_property(all_resources_offset, mati_references, val)?;
-
-				let new_pointer = (records.len() as u32 * 16
-					+ u32::from_le_bytes(record[4..8].try_into().unwrap())
-					+ resources.len() as u32)
-					.to_le_bytes();
-
-				record[4] = new_pointer[0];
-				record[5] = new_pointer[1];
-				record[6] = new_pointer[2];
-				record[7] = new_pointer[3];
-
-				records.push(record);
-
-				if let Some(res) = resource {
-					resources.push(res);
-				}
-			}
-
-			(data, Some([records, resources].concat().concat()))
+			(data, Some(resources_concat))
 		}
 
 		IntermediateMaterialProperty::Opacity(val)
@@ -1302,10 +1407,14 @@ fn generate_property(
 					data.extend_from_slice(&(val.len() as u32).to_le_bytes()); // Count
 					data.extend_from_slice(&[0, 0, 0, 0]); // Type (0 for float)
 
-					(
-						data,
-						Some(val.into_iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>())
-					)
+					let mut resources = val.into_iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+
+					// Alignment
+					while resources.len() % 16 != 0 {
+						resources.push(0u8);
+					}
+
+					(data, Some(resources))
 				}
 			}
 		}
@@ -1512,6 +1621,10 @@ fn parse_instance(instance: IntermediateMaterialProperty) -> Result<(String, Str
 						.to_owned();
 
 					RenderState {
+						name: props.iter().find_map(|x| match x {
+							IntermediateMaterialProperty::Name(x) => Some(x.to_owned()),
+							_ => None
+						}),
 						enabled: props.iter().find_map(|x| match *x {
 							IntermediateMaterialProperty::Enabled(x) => Some(x != 0),
 							_ => None
@@ -1816,6 +1929,9 @@ fn to_intermediate(binder: Binder) -> Result<IntermediateMaterialProperty> {
 			vec![IntermediateMaterialProperty::RenderState({
 				let mut props = Vec::new();
 
+				// Unused by the game but added for completeness
+				props.push(IntermediateMaterialProperty::Name("RenderState".into()));
+
 				if let Some(enabled) = binder.render_state.enabled {
 					props.push(IntermediateMaterialProperty::Enabled(if enabled { 1 } else { 0 }));
 				}
@@ -1944,23 +2060,34 @@ fn to_intermediate(binder: Binder) -> Result<IntermediateMaterialProperty> {
 							]),
 
 							MaterialPropertyValue::Colour { enabled, value } => {
-								let mut chars = value[1..].chars();
-								let r = u8::from_str_radix(&chars.next().unwrap().to_string(), 16)? as f32 / 15.0;
-								let g = u8::from_str_radix(&chars.next().unwrap().to_string(), 16)? as f32 / 15.0;
-								let b = u8::from_str_radix(&chars.next().unwrap().to_string(), 16)? as f32 / 15.0;
-								let a = if value.len() > 7 {
-									u8::from_str_radix(&chars.next().unwrap().to_string(), 16)? as f32 / 15.0
-								} else {
-									1.0
-								};
-
 								if value.len() > 7 {
+									let r = u8::from_str_radix(&value.chars().skip(1).take(2).collect::<String>(), 16)?
+										as f32 / 255.0;
+
+									let g = u8::from_str_radix(&value.chars().skip(3).take(2).collect::<String>(), 16)?
+										as f32 / 255.0;
+
+									let b = u8::from_str_radix(&value.chars().skip(5).take(2).collect::<String>(), 16)?
+										as f32 / 255.0;
+
+									let a = u8::from_str_radix(&value.chars().skip(7).take(2).collect::<String>(), 16)?
+										as f32 / 255.0;
+
 									IntermediateMaterialProperty::Color4(vec![
 										IntermediateMaterialProperty::Name(name),
 										IntermediateMaterialProperty::Enabled(if enabled { 1 } else { 0 }),
 										IntermediateMaterialProperty::Value(FloatVal::Vector(vec![r, g, b, a])),
 									])
 								} else {
+									let r = u8::from_str_radix(&value.chars().skip(1).take(2).collect::<String>(), 16)?
+										as f32 / 255.0;
+
+									let g = u8::from_str_radix(&value.chars().skip(3).take(2).collect::<String>(), 16)?
+										as f32 / 255.0;
+
+									let b = u8::from_str_radix(&value.chars().skip(5).take(2).collect::<String>(), 16)?
+										as f32 / 255.0;
+
 									IntermediateMaterialProperty::Color(vec![
 										IntermediateMaterialProperty::Name(name),
 										IntermediateMaterialProperty::Enabled(if enabled { 1 } else { 0 }),
