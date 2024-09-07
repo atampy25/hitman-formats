@@ -5,7 +5,7 @@ use std::{
 	str::FromStr
 };
 
-use hitman_commons::metadata::{ReferenceFlags, ReferenceType, ResourceReference, RuntimeID};
+use hitman_commons::metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID};
 use indexmap::IndexMap;
 use thiserror::Error;
 use tryvial::try_fn;
@@ -344,6 +344,8 @@ pub enum FloatVal {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Material {
+	pub id: RuntimeID,
+
 	pub name: String,
 
 	#[cfg_attr(feature = "serde", serde(rename = "type"))]
@@ -980,7 +982,7 @@ pub enum MaterialPropertyValue {
 
 impl Material {
 	#[try_fn]
-	pub fn parse(mati_data: &[u8], mati_references: &[ResourceReference]) -> Result<Self> {
+	pub fn parse(mati_data: &[u8], mati_metadata: &ResourceMetadata) -> Result<Self> {
 		let mut mati = Cursor::new(mati_data);
 
 		let header_offset = u32::from_le_bytes({
@@ -1045,16 +1047,17 @@ impl Material {
 
 		let (name, tags, binder) = parse_instance(parse_material_property(
 			mati_data,
-			mati_references,
+			&mati_metadata.references,
 			instance_offset.into()
 		)?)?;
 
 		Self {
+			id: mati_metadata.id,
 			name,
 			material_type: material_type.parse()?,
 			tags,
-			class: mati_references.get(mate_index as usize).map(|x| x.resource),
-			descriptor: mati_references.get(eres_index as usize).map(|x| x.resource),
+			class: mati_metadata.references.get(mate_index as usize).map(|x| x.resource),
+			descriptor: mati_metadata.references.get(eres_index as usize).map(|x| x.resource),
 			class_flags: ClassFlags::from_u32(class_flags),
 			instance_flags: InstanceFlags::from_u32(instance_flags),
 			binder
@@ -1062,7 +1065,7 @@ impl Material {
 	}
 
 	#[try_fn]
-	pub fn generate(self) -> Result<(Vec<u8>, Vec<ResourceReference>)> {
+	pub fn generate(self) -> Result<(Vec<u8>, ResourceMetadata)> {
 		let mut mati = vec![];
 		let mut mati_references = vec![];
 
@@ -1167,7 +1170,16 @@ impl Material {
 		mati.extend_from_slice(&0u32.to_le_bytes());
 		mati.extend_from_slice(&0u32.to_le_bytes());
 
-		(mati, mati_references)
+		(
+			mati,
+			ResourceMetadata {
+				id: self.id,
+				resource_type: "MATI".try_into().unwrap(),
+				compressed: ResourceMetadata::infer_compressed("MATI".try_into().unwrap()),
+				scrambled: ResourceMetadata::infer_scrambled("MATI".try_into().unwrap()),
+				references: mati_references
+			}
+		)
 	}
 }
 
