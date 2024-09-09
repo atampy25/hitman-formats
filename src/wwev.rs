@@ -174,4 +174,52 @@ impl WwiseEvent {
 			}
 		}
 	}
+
+	/// Serialise this WWEV.
+	pub fn generate(self) -> Vec<u8> {
+		let mut wwev = vec![];
+
+		// Name
+		wwev.extend_from_slice(&(self.name.len() as u32 + 1).to_le_bytes());
+		wwev.extend_from_slice(self.name.as_bytes());
+		wwev.push(0);
+
+		// Max attenuation
+		wwev.extend_from_slice(&self.event_max_attenuation.to_le_bytes());
+
+		match self.data {
+			WwiseEventData::NonStreamed(ref audio_objects) => {
+				// Non-streamed count
+				wwev.extend_from_slice(&(audio_objects.len() as i32).to_le_bytes());
+
+				for audio_object in audio_objects {
+					wwev.extend_from_slice(&audio_object.wem_id.to_le_bytes());
+					wwev.extend_from_slice(&(audio_object.data.len() as u32).to_le_bytes());
+					wwev.extend_from_slice(&audio_object.data);
+				}
+			}
+
+			WwiseEventData::Streamed(ref audio_objects) => {
+				// Non-streamed count
+				wwev.extend_from_slice(&0u32.to_le_bytes());
+
+				// Entries count
+				wwev.extend_from_slice(&(audio_objects.len() as u32).to_le_bytes());
+
+				for audio_object in audio_objects {
+					wwev.extend_from_slice(&audio_object.dependency_index.to_le_bytes());
+					wwev.extend_from_slice(&audio_object.wem_id.to_le_bytes());
+
+					if let Some(ref prefetched_data) = audio_object.prefetched_data {
+						wwev.extend_from_slice(&(prefetched_data.len() as u32).to_le_bytes());
+						wwev.extend_from_slice(prefetched_data);
+					} else {
+						wwev.extend_from_slice(&0u32.to_le_bytes());
+					}
+				}
+			}
+		}
+
+		wwev
+	}
 }
