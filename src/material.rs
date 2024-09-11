@@ -62,239 +62,396 @@ pub enum MaterialError {
 	#[error("invalid blend mode: {0}")]
 	InvalidBlendMode(String),
 
+	#[error("vectors must be size 2, 3 or 4")]
+	InvalidVector,
+
 	#[error("invalid hex: {0}")]
 	InvalidHex(#[from] ParseIntError)
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct MaterialOverride {
-	pub name: String,
-	pub data: MaterialOverrideData
+pub struct MaterialEntity {
+	pub factory: RuntimeID,
+	pub blueprint: RuntimeID,
+	pub overrides: IndexMap<String, MaterialOverride>
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", tag = "type", content = "value")]
+#[cfg_attr(feature = "serde", rename_all = "camelCase")]
 #[derive(Clone, Debug, PartialEq)]
-pub enum MaterialOverrideData {
+pub enum MaterialOverride {
 	Texture(Option<RuntimeID>),
-	ColorRGB(f32, f32, f32),
-	ColorRGBA(f32, f32, f32, f32),
+	Color(String),
 	Float(f32),
-	Vector2(f32, f32),
-	Vector3(f32, f32, f32),
-	Vector4(f32, f32, f32, f32)
+	Vector(Vec<f32>)
 }
 
-/// Get the overrides of a material entity (MATT/MATB).
-#[try_fn]
-pub fn get_material_overrides(
-	matt_data: &[u8],
-	matt_references: &[ResourceReference],
-	matb_data: &[u8]
-) -> Result<Vec<MaterialOverride>> {
-	let mut properties = vec![];
+impl MaterialEntity {
+	/// Parse a material entity (MATT/MATB).
+	#[try_fn]
+	pub fn parse(
+		matt_data: &[u8],
+		matt_metadata: &ResourceMetadata,
+		matb_data: &[u8],
+		matb_metadata: &ResourceMetadata
+	) -> Result<Self> {
+		let mut properties = vec![];
 
-	let mut matt = Cursor::new(matt_data);
-	let mut matb = Cursor::new(matb_data);
+		let mut matt = Cursor::new(matt_data);
+		let mut matb = Cursor::new(matb_data);
 
-	let mut prop_names = vec![];
+		let mut prop_names = vec![];
 
-	while matb.position() < (matb.get_ref().len() - 1) as u64 {
-		// All MATB entries are strings apparently so this type field is useless
-		let _ = {
-			let mut x = [0u8; 1];
-			matb.read_exact(&mut x)?;
-			x[0]
-		};
+		while matb.position() < (matb.get_ref().len() - 1) as u64 {
+			// The type field is for the property type
+			// but it doesn't matter here because all the MATB contains is the name
+			let _ = {
+				let mut x = [0u8; 1];
+				matb.read_exact(&mut x)?;
+				x[0]
+			};
 
-		let matb_string_length = u32::from_le_bytes({
-			let mut x = [0u8; 4];
-			matb.read_exact(&mut x)?;
-			x
-		});
+			let matb_string_length = u32::from_le_bytes({
+				let mut x = [0u8; 4];
+				matb.read_exact(&mut x)?;
+				x
+			});
 
-		// I'm assuming that no one is using a 16-bit computer
-		let mut string_data = vec![0; matb_string_length as usize];
-		matb.read_exact(&mut string_data)?;
+			// I'm assuming that no one is using a 16-bit computer
+			let mut string_data = vec![0; matb_string_length as usize];
+			matb.read_exact(&mut string_data)?;
 
-		prop_names.push(std::str::from_utf8(&string_data[0..string_data.len() - 1])?.to_owned());
+			prop_names.push(std::str::from_utf8(&string_data[0..string_data.len() - 1])?.to_owned());
+		}
+
+		let mut cur_entry = 0;
+
+		while matt.position() < (matt.get_ref().len() - 1) as u64 {
+			let entry_type = {
+				let mut x = [0u8; 1];
+				matt.read_exact(&mut x)?;
+				x[0]
+			};
+
+			properties.push((
+				prop_names
+					.get(cur_entry)
+					.ok_or(MaterialError::EntryCountMismatch)?
+					.into(),
+				match entry_type {
+					// A texture.
+					1 => {
+						let texture_dependency_index = u32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						if texture_dependency_index != u32::MAX {
+							MaterialOverride::Texture(Some(
+								matt_metadata
+									.references
+									.get(usize::try_from(texture_dependency_index)?)
+									.ok_or_else(|| {
+										MaterialError::InvalidDependency(
+											usize::try_from(texture_dependency_index).unwrap()
+										)
+									})?
+									.resource
+							))
+						} else {
+							MaterialOverride::Texture(None)
+						}
+					}
+
+					// An RGB colour.
+					2 => {
+						let x = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let y = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let z = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						MaterialOverride::Color(format!(
+							"#{:0>2x}{:0>2x}{:0>2x}",
+							(x * 255.0).round() as u8,
+							(y * 255.0).round() as u8,
+							(z * 255.0).round() as u8
+						))
+					}
+
+					// An RGBA colour.
+					3 => {
+						let x = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let y = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let z = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let w = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						MaterialOverride::Color(format!(
+							"#{:0>2x}{:0>2x}{:0>2x}{:0>2x}",
+							(x * 255.0).round() as u8,
+							(y * 255.0).round() as u8,
+							(z * 255.0).round() as u8,
+							(w * 255.0).round() as u8
+						))
+					}
+
+					// A float.
+					4 => {
+						let val = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						MaterialOverride::Float(val)
+					}
+
+					// A Vector2.
+					5 => {
+						let x = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let y = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						MaterialOverride::Vector(vec![x, y])
+					}
+
+					// A Vector3.
+					6 => {
+						let x = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let y = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let z = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						MaterialOverride::Vector(vec![x, y, z])
+					}
+
+					// A Vector4.
+					7 => {
+						let x = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let y = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let z = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						let w = f32::from_le_bytes({
+							let mut x = [0u8; 4];
+							matt.read_exact(&mut x)?;
+							x
+						});
+
+						MaterialOverride::Vector(vec![x, y, z, w])
+					}
+
+					_ => return Err(MaterialError::UnrecognisedEntryType(entry_type))
+				}
+			));
+
+			cur_entry += 1;
+		}
+
+		Self {
+			factory: matt_metadata.id,
+			blueprint: matb_metadata.id,
+			overrides: properties.into_iter().collect()
+		}
 	}
 
-	let mut cur_entry = 0;
+	/// Generate the game binary for this material entity.
+	#[try_fn]
+	pub fn generate(self) -> Result<((Vec<u8>, ResourceMetadata), (Vec<u8>, ResourceMetadata))> {
+		let mut matt = vec![];
+		let mut matb = vec![];
 
-	while matt.position() < (matt.get_ref().len() - 1) as u64 {
-		let entry_type = {
-			let mut x = [0u8; 1];
-			matt.read_exact(&mut x)?;
-			x[0]
-		};
+		let mut matt_references = vec![
+			ResourceReference {
+				resource: "00B4B11DA327CAD0".parse().unwrap(),
+				flags: ReferenceFlags::default()
+			},
+			ResourceReference {
+				resource: self.blueprint,
+				flags: ReferenceFlags::default()
+			},
+		];
 
-		properties.push(MaterialOverride {
-			name: prop_names
-				.get(cur_entry)
-				.ok_or(MaterialError::EntryCountMismatch)?
-				.into(),
-			data: match entry_type {
-				// A texture.
-				1 => {
-					let texture_dependency_index = u32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
+		for (prop_name, prop_val) in self.overrides {
+			let prop_name = prop_name.as_bytes();
+			let prop_name_len = prop_name.len() as u32;
+
+			match prop_val {
+				MaterialOverride::Texture(Some(id)) => {
+					matt_references.push(ResourceReference {
+						resource: id,
+						flags: ReferenceFlags::default()
 					});
 
-					if texture_dependency_index != u32::MAX {
-						MaterialOverrideData::Texture(Some(
-							matt_references
-								.get(usize::try_from(texture_dependency_index)?)
-								.ok_or_else(|| {
-									MaterialError::InvalidDependency(usize::try_from(texture_dependency_index).unwrap())
-								})?
-								.resource
-						))
+					matb.extend_from_slice(&[1]);
+
+					matt.extend_from_slice(&[1]);
+					matt.extend_from_slice(&(matt_references.len() as u32 - 1).to_le_bytes());
+				}
+
+				MaterialOverride::Texture(None) => {
+					matt.extend_from_slice(&[1]);
+					matt.extend_from_slice(&u32::MAX.to_le_bytes());
+				}
+
+				MaterialOverride::Color(value) => {
+					if value.len() > 7 {
+						let r =
+							u8::from_str_radix(&value.chars().skip(1).take(2).collect::<String>(), 16)? as f32 / 255.0;
+
+						let g =
+							u8::from_str_radix(&value.chars().skip(3).take(2).collect::<String>(), 16)? as f32 / 255.0;
+
+						let b =
+							u8::from_str_radix(&value.chars().skip(5).take(2).collect::<String>(), 16)? as f32 / 255.0;
+
+						let a =
+							u8::from_str_radix(&value.chars().skip(7).take(2).collect::<String>(), 16)? as f32 / 255.0;
+
+						matt.extend_from_slice(&[3]);
+						matt.extend_from_slice(&r.to_le_bytes());
+						matt.extend_from_slice(&g.to_le_bytes());
+						matt.extend_from_slice(&b.to_le_bytes());
+						matt.extend_from_slice(&a.to_le_bytes());
 					} else {
-						MaterialOverrideData::Texture(None)
+						let r =
+							u8::from_str_radix(&value.chars().skip(1).take(2).collect::<String>(), 16)? as f32 / 255.0;
+
+						let g =
+							u8::from_str_radix(&value.chars().skip(3).take(2).collect::<String>(), 16)? as f32 / 255.0;
+
+						let b =
+							u8::from_str_radix(&value.chars().skip(5).take(2).collect::<String>(), 16)? as f32 / 255.0;
+
+						matt.extend_from_slice(&[2]);
+						matt.extend_from_slice(&r.to_le_bytes());
+						matt.extend_from_slice(&g.to_le_bytes());
+						matt.extend_from_slice(&b.to_le_bytes());
 					}
 				}
 
-				// An RGB colour.
-				2 => {
-					let x = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
+				MaterialOverride::Float(val) => {
+					matb.extend_from_slice(&[4]);
 
-					let y = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					let z = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					MaterialOverrideData::ColorRGB(x, y, z)
+					matt.extend_from_slice(&[4]);
+					matt.extend_from_slice(&val.to_le_bytes());
 				}
 
-				// An RGBA colour.
-				3 => {
-					let x = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
+				MaterialOverride::Vector(vec) => {
+					let entry_type = match vec.len() {
+						2 => 5,
+						3 => 6,
+						4 => 7,
+						_ => return Err(MaterialError::InvalidVector)
+					};
 
-					let y = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
+					matb.extend_from_slice(&[entry_type]);
 
-					let z = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					let w = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					MaterialOverrideData::ColorRGBA(x, y, z, w)
+					matt.extend_from_slice(&[entry_type]);
+					for value in vec {
+						matt.extend_from_slice(&value.to_le_bytes());
+					}
 				}
+			};
 
-				// A float.
-				4 => {
-					let val = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
+			matb.extend_from_slice(&(prop_name_len + 1).to_le_bytes());
+			matb.extend_from_slice(&[prop_name, &[0]].concat());
+		}
 
-					MaterialOverrideData::Float(val)
+		(
+			(
+				matt,
+				ResourceMetadata {
+					id: self.factory,
+					resource_type: "MATT".try_into().unwrap(),
+					compressed: ResourceMetadata::infer_compressed("MATT".try_into().unwrap()),
+					scrambled: ResourceMetadata::infer_scrambled("MATT".try_into().unwrap()),
+					references: matt_references
 				}
-
-				// A Vector2.
-				5 => {
-					let x = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					let y = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					MaterialOverrideData::Vector2(x, y)
+			),
+			(
+				matb,
+				ResourceMetadata {
+					id: self.blueprint,
+					resource_type: "MATB".try_into().unwrap(),
+					compressed: ResourceMetadata::infer_compressed("MATB".try_into().unwrap()),
+					scrambled: ResourceMetadata::infer_scrambled("MATB".try_into().unwrap()),
+					references: vec![ResourceReference {
+						resource: "00A1595C0918E2C9".parse().unwrap(),
+						flags: ReferenceFlags::default()
+					}]
 				}
-
-				// A Vector3.
-				6 => {
-					let x = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					let y = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					let z = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					MaterialOverrideData::Vector3(x, y, z)
-				}
-
-				// A Vector4.
-				7 => {
-					let x = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					let y = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					let z = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					let w = f32::from_le_bytes({
-						let mut x = [0u8; 4];
-						matt.read_exact(&mut x)?;
-						x
-					});
-
-					MaterialOverrideData::Vector4(x, y, z, w)
-				}
-
-				_ => return Err(MaterialError::UnrecognisedEntryType(entry_type))
-			}
-		});
-
-		cur_entry += 1;
+			)
+		)
 	}
-
-	properties
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -343,7 +500,7 @@ pub enum FloatVal {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct Material {
+pub struct MaterialInstance {
 	pub id: RuntimeID,
 
 	pub name: String,
@@ -980,7 +1137,8 @@ pub enum MaterialPropertyValue {
 	}
 }
 
-impl Material {
+impl MaterialInstance {
+	/// Parse a material instance (MATI).
 	#[try_fn]
 	pub fn parse(mati_data: &[u8], mati_metadata: &ResourceMetadata) -> Result<Self> {
 		let mut mati = Cursor::new(mati_data);
@@ -1064,6 +1222,7 @@ impl Material {
 		}
 	}
 
+	/// Generate the game binary for this material instance.
 	#[try_fn]
 	pub fn generate(self) -> Result<(Vec<u8>, ResourceMetadata)> {
 		let mut mati = vec![];
@@ -1119,11 +1278,7 @@ impl Material {
 		if let Some(class) = self.class {
 			mati_references.push(ResourceReference {
 				resource: class,
-				flags: ReferenceFlags {
-					reference_type: ReferenceType::Install,
-					acquired: false,
-					language_code: 0b0001_1111
-				}
+				flags: ReferenceFlags::default()
 			});
 
 			// MATE index

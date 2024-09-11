@@ -18,6 +18,7 @@ pub enum WwevError {
 }
 
 /// A Wwise event; a parsed WWEV file.
+#[derive(Clone, Debug, PartialEq)]
 pub struct WwiseEvent {
 	/// The name of the event.
 	pub name: String,
@@ -28,6 +29,7 @@ pub struct WwiseEvent {
 	pub data: WwiseEventData
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum WwiseEventData {
 	/// One or more non-streamed audio objects (all data is stored directly in the WWEV).
 	NonStreamed(Vec<WwiseNonStreamedAudioObject>),
@@ -36,11 +38,13 @@ pub enum WwiseEventData {
 	Streamed(Vec<WwiseStreamedAudioObject>)
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct WwiseNonStreamedAudioObject {
 	pub wem_id: u32,
 	pub data: Vec<u8>
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct WwiseStreamedAudioObject {
 	/// The index of the WWEM dependency which contains the data for this object.
 	pub dependency_index: u32,
