@@ -78,8 +78,8 @@ pub struct MaterialEntity {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", tag = "type", content = "value")]
-#[cfg_attr(feature = "serde", rename_all = "camelCase")]
+#[cfg_attr(feature = "serde", serde(tag = "type", content = "value"))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(Clone, Debug, PartialEq)]
 pub enum MaterialOverride {
 	Texture(Option<RuntimeID>),
