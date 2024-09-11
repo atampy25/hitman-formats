@@ -74,6 +74,7 @@ pub enum MaterialError {
 pub struct MaterialEntity {
 	pub factory: RuntimeID,
 	pub blueprint: RuntimeID,
+	pub material: RuntimeID,
 	pub overrides: IndexMap<String, MaterialOverride>
 }
 
@@ -319,6 +320,7 @@ impl MaterialEntity {
 		Self {
 			factory: matt_metadata.id,
 			blueprint: matb_metadata.id,
+			material: matt_metadata.references.get(2).ok_or(MaterialError::InvalidDependency(2))?.resource,
 			overrides: properties.into_iter().collect()
 		}
 	}
@@ -338,6 +340,10 @@ impl MaterialEntity {
 				resource: self.blueprint,
 				flags: ReferenceFlags::default()
 			},
+			ResourceReference {
+				resource: self.material,
+				flags: ReferenceFlags::default()
+			}
 		];
 
 		for (prop_name, prop_val) in self.overrides {
@@ -616,12 +622,12 @@ pub struct ClassFlags {
 	#[cfg_attr(feature = "serde", serde(rename = "usesSpriteSAVS"))]
 	#[cfg_attr(feature = "serde", serde(default))]
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "std::ops::Not::not"))]
-	pub uses_sprite_savs: bool,
+	pub uses_sprite_sa_vs: bool,
 
 	#[cfg_attr(feature = "serde", serde(rename = "usesSpriteAOVS"))]
 	#[cfg_attr(feature = "serde", serde(default))]
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "std::ops::Not::not"))]
-	pub uses_sprite_aovs: bool,
+	pub uses_sprite_ao_vs: bool,
 
 	#[cfg_attr(feature = "serde", serde(default))]
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "std::ops::Not::not"))]
@@ -679,8 +685,8 @@ impl ClassFlags {
 			prim_weighted: flags & 0x100 == 0x100,
 			dof_override: flags & 0x200 == 0x200,
 			uses_default_vs: flags & 0x400 == 0x400,
-			uses_sprite_savs: flags & 0x800 == 0x800,
-			uses_sprite_aovs: flags & 0x1000 == 0x1000,
+			uses_sprite_sa_vs: flags & 0x800 == 0x800,
+			uses_sprite_ao_vs: flags & 0x1000 == 0x1000,
 			alpha: flags & 0x2000 == 0x2000,
 			uses_simple_shader: flags & 0x4000 == 0x4000,
 			disable_instancing: flags & 0x8000 == 0x8000,
@@ -740,11 +746,11 @@ impl ClassFlags {
 			flags |= 0x400;
 		}
 
-		if self.uses_sprite_savs {
+		if self.uses_sprite_sa_vs {
 			flags |= 0x800;
 		}
 
-		if self.uses_sprite_aovs {
+		if self.uses_sprite_ao_vs {
 			flags |= 0x1000;
 		}
 
