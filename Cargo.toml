@@ -10,9 +10,18 @@ tryvial = "0.2.0"
 hitman-commons = { git = "https://github.com/atampy25/hitman-commons" }
 hex = "0.4.3"
 serde = { version = "1.0.208", optional = true }
+rune = { version = "0.13.4", optional = true }
+better-rune-derive = { git = "https://github.com/atampy25/better-rune-derive", optional = true }
+serde_with = { version = "3.11.0", optional = true }
 
 [features]
 material = []
 ores = []
 wwev = []
 serde = ["dep:serde", "hitman-commons/serde", "indexmap/serde"]
+rune = [
+    "dep:rune",
+    "dep:better-rune-derive",
+    "dep:serde_with",
+    "hitman-commons/rune",
+]

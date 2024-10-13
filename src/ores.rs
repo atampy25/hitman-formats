@@ -4,9 +4,26 @@ use indexmap::IndexMap;
 use thiserror::Error;
 use tryvial::try_fn;
 
+#[cfg(feature = "rune")]
+pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
+	let mut module = rune::Module::with_crate_item("hitman_formats", ["ores"])?;
+
+	module.ty::<OresError>()?;
+	module.function_meta(r_parse_hashes_ores)?;
+	module.function_meta(r_serialise_hashes_ores)?;
+	module.function_meta(parse_json_ores__meta)?;
+	module.function_meta(serialise_json_ores__meta)?;
+
+	Ok(module)
+}
+
 type Result<T, E = OresError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::ores))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DISPLAY, STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum OresError {
 	#[error("seek error: {0}")]
 	Seek(#[from] std::io::Error),
@@ -22,6 +39,14 @@ pub enum OresError {
 
 	#[error("invalid hex hash: {0}")]
 	HexError(#[from] hex::FromHexError)
+}
+
+/// Returns a Vec to support indexing in Rune.
+#[cfg(feature = "rune")]
+#[rune::function(path = parse_hashes_ores)]
+#[try_fn]
+fn r_parse_hashes_ores(bin_data: &[u8]) -> Result<Vec<(String, String)>> {
+	parse_hashes_ores(bin_data)?.into_iter().collect()
 }
 
 #[try_fn]
@@ -121,6 +146,12 @@ fn offset_of_string(values: &[&String], cur_value: usize) -> usize {
 	offset
 }
 
+#[cfg(feature = "rune")]
+#[rune::function(path = serialise_hashes_ores)]
+fn r_serialise_hashes_ores(data: Vec<(String, String)>) -> Result<Vec<u8>> {
+	serialise_hashes_ores(&data.into_iter().collect())
+}
+
 #[try_fn]
 pub fn serialise_hashes_ores(data: &IndexMap<String, String>) -> Result<Vec<u8>> {
 	let (hashes, values): (Vec<_>, Vec<_>) = data.into_iter().unzip();
@@ -185,6 +216,7 @@ pub fn serialise_hashes_ores(data: &IndexMap<String, String>) -> Result<Vec<u8>>
 }
 
 #[try_fn]
+#[cfg_attr(feature = "rune", rune::function(keep))]
 pub fn parse_json_ores(bin_data: &[u8]) -> Result<String> {
 	let mut cursor = Cursor::new(bin_data);
 	cursor.seek(SeekFrom::Start(36))?;
@@ -196,6 +228,7 @@ pub fn parse_json_ores(bin_data: &[u8]) -> Result<String> {
 }
 
 #[try_fn]
+#[cfg_attr(feature = "rune", rune::function(keep))]
 pub fn serialise_json_ores(data: &str) -> Result<Vec<u8>> {
 	let mut ores = vec![];
 	let mut cursor = Cursor::new(&mut ores);

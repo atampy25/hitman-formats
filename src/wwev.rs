@@ -3,9 +3,26 @@ use std::io::{Cursor, Read};
 use thiserror::Error;
 use tryvial::try_fn;
 
+#[cfg(feature = "rune")]
+pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
+	let mut module = rune::Module::with_crate_item("hitman_formats", ["wwev"])?;
+
+	module.ty::<WwevError>()?;
+	module.ty::<WwiseEvent>()?;
+	module.ty::<WwiseEventData>()?;
+	module.ty::<WwiseNonStreamedAudioObject>()?;
+	module.ty::<WwiseStreamedAudioObject>()?;
+
+	Ok(module)
+}
+
 type Result<T, E = WwevError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DISPLAY, STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum WwevError {
 	#[error("seek error: {0}")]
 	Seek(#[from] std::io::Error),
@@ -19,6 +36,10 @@ pub enum WwevError {
 
 /// A Wwise event; a parsed WWEV file.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
 pub struct WwiseEvent {
 	/// The name of the event.
 	pub name: String,
@@ -30,21 +51,35 @@ pub struct WwiseEvent {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum WwiseEventData {
 	/// One or more non-streamed audio objects (all data is stored directly in the WWEV).
-	NonStreamed(Vec<WwiseNonStreamedAudioObject>),
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	NonStreamed(#[cfg_attr(feature = "rune", rune(get, set))] Vec<WwiseNonStreamedAudioObject>),
 
 	/// One or more streamed audio objects (depending on WWEM files which contain the full data).
-	Streamed(Vec<WwiseStreamedAudioObject>)
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Streamed(#[cfg_attr(feature = "rune", rune(get, set))] Vec<WwiseStreamedAudioObject>)
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
 pub struct WwiseNonStreamedAudioObject {
 	pub wem_id: u32,
 	pub data: Vec<u8>
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
 pub struct WwiseStreamedAudioObject {
 	/// The index of the WWEM dependency which contains the data for this object.
 	pub dependency_index: u32,
@@ -58,6 +93,7 @@ pub struct WwiseStreamedAudioObject {
 impl WwiseEvent {
 	/// Parse a WWEV.
 	#[try_fn]
+	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
 	pub fn parse(wwev_data: &[u8]) -> Result<Self> {
 		let mut wwev = Cursor::new(wwev_data);
 
@@ -180,6 +216,7 @@ impl WwiseEvent {
 	}
 
 	/// Serialise this WWEV.
+	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
 	pub fn generate(self) -> Vec<u8> {
 		let mut wwev = vec![];
 

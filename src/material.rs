@@ -10,9 +10,35 @@ use indexmap::IndexMap;
 use thiserror::Error;
 use tryvial::try_fn;
 
+#[cfg(feature = "rune")]
+pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
+	let mut module = rune::Module::with_crate_item("hitman_formats", ["material"])?;
+
+	module.ty::<MaterialError>()?;
+	module.ty::<MaterialEntity>()?;
+	module.ty::<MaterialOverride>()?;
+	module.ty::<IntermediateMaterialProperty>()?;
+	module.ty::<FloatVal>()?;
+	module.ty::<MaterialInstance>()?;
+	module.ty::<MaterialType>()?;
+	module.ty::<ClassFlags>()?;
+	module.ty::<InstanceFlags>()?;
+	module.ty::<Binder>()?;
+	module.ty::<RenderState>()?;
+	module.ty::<CullingMode>()?;
+	module.ty::<BlendMode>()?;
+	module.ty::<MaterialPropertyValue>()?;
+
+	Ok(module)
+}
+
 type Result<T, E = MaterialError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DISPLAY, STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum MaterialError {
 	#[error("seek error: {0}")]
 	Seek(#[from] std::io::Error),
@@ -71,27 +97,88 @@ pub enum MaterialError {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(
+	feature = "rune",
+	rune_functions(
+		Self::parse__meta,
+		Self::generate__meta,
+		Self::r_get_overrides,
+		Self::r_set_overrides,
+		Self::r_get_override,
+		Self::r_insert_override,
+		Self::r_remove_override
+	)
+)]
 pub struct MaterialEntity {
+	#[cfg_attr(feature = "rune", rune(get, set))]
 	pub factory: RuntimeID,
+
+	#[cfg_attr(feature = "rune", rune(get, set))]
 	pub blueprint: RuntimeID,
+
+	#[cfg_attr(feature = "rune", rune(get, set))]
 	pub material: RuntimeID,
+
 	pub overrides: IndexMap<String, MaterialOverride>
+}
+
+#[cfg(feature = "rune")]
+impl MaterialEntity {
+	#[rune::function(instance, path = Self::get_overrides)]
+	fn r_get_overrides(&self) -> Vec<(String, MaterialOverride)> {
+		self.overrides.clone().into_iter().collect()
+	}
+
+	#[rune::function(instance, path = Self::set_overrides)]
+	fn r_set_overrides(&mut self, overrides: Vec<(String, MaterialOverride)>) {
+		self.overrides = overrides.into_iter().collect();
+	}
+
+	#[rune::function(instance, path = Self::get_override)]
+	fn r_get_override(&self, key: &str) -> Option<MaterialOverride> {
+		self.overrides.get(key).cloned()
+	}
+
+	#[rune::function(instance, path = Self::insert_override)]
+	fn r_insert_override(&mut self, key: String, value: MaterialOverride) {
+		self.overrides.insert(key, value);
+	}
+
+	#[rune::function(instance, path = Self::remove_override)]
+	fn r_remove_override(&mut self, key: &str) {
+		self.overrides.shift_remove(key);
+	}
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", content = "value"))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum MaterialOverride {
-	Texture(Option<RuntimeID>),
-	Color(String),
-	Float(f32),
-	Vector(Vec<f32>)
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Texture(#[cfg_attr(feature = "rune", rune(get, set))] Option<RuntimeID>),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Color(#[cfg_attr(feature = "rune", rune(get, set))] String),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Float(#[cfg_attr(feature = "rune", rune(get, set))] f32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Vector(#[cfg_attr(feature = "rune", rune(get, set))] Vec<f32>)
 }
 
 impl MaterialEntity {
 	/// Parse a material entity (MATT/MATB).
 	#[try_fn]
+	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
 	pub fn parse(
 		matt_data: &[u8],
 		matt_metadata: &ResourceMetadata,
@@ -320,13 +407,18 @@ impl MaterialEntity {
 		Self {
 			factory: matt_metadata.id,
 			blueprint: matb_metadata.id,
-			material: matt_metadata.references.get(2).ok_or(MaterialError::InvalidDependency(2))?.resource,
+			material: matt_metadata
+				.references
+				.get(2)
+				.ok_or(MaterialError::InvalidDependency(2))?
+				.resource,
 			overrides: properties.into_iter().collect()
 		}
 	}
 
 	/// Generate the game binary for this material entity.
 	#[try_fn]
+	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
 	pub fn generate(self) -> Result<((Vec<u8>, ResourceMetadata), (Vec<u8>, ResourceMetadata))> {
 		let mut matt = vec![];
 		let mut matb = vec![];
@@ -343,7 +435,7 @@ impl MaterialEntity {
 			ResourceReference {
 				resource: self.material,
 				flags: ReferenceFlags::default()
-			}
+			},
 		];
 
 		for (prop_name, prop_val) in self.overrides {
@@ -460,52 +552,132 @@ impl MaterialEntity {
 	}
 }
 
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 #[derive(Clone, Debug, PartialEq)]
 pub enum IntermediateMaterialProperty {
-	AlphaReference(u32),
-	AlphaTestEnabled(u32),
-	BlendEnabled(u32),
-	Binder(Vec<IntermediateMaterialProperty>),
-	BlendMode(String),
-	Color(Vec<IntermediateMaterialProperty>),
-	Color4(Vec<IntermediateMaterialProperty>),
-	CullingMode(String),
-	DecalBlendDiffuse(u32),
-	DecalBlendEmission(u32),
-	DecalBlendNormal(u32),
-	DecalBlendRoughness(u32),
-	DecalBlendSpecular(u32),
-	Enabled(u32),
-	FogEnabled(u32),
-	FloatValue(Vec<IntermediateMaterialProperty>),
-	Instance(Vec<IntermediateMaterialProperty>),
-	Name(String),
-	Opacity(f32),
-	RenderState(Vec<IntermediateMaterialProperty>),
-	SubsurfaceValue(f32),
-	SubsurfaceBlue(f32),
-	SubsurfaceGreen(f32),
-	SubsurfaceRed(f32),
-	Tags(String),
-	Texture(Vec<IntermediateMaterialProperty>),
-	TilingU(String),
-	TilingV(String),
-	TextureID(Option<RuntimeID>),
-	Type(String),
-	Value(FloatVal),
-	ZBias(u32),
-	ZOffset(f32)
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	AlphaReference(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	AlphaTestEnabled(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	BlendEnabled(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Binder(#[cfg_attr(feature = "rune", rune(get, set))] Vec<IntermediateMaterialProperty>),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	BlendMode(#[cfg_attr(feature = "rune", rune(get, set))] String),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Color(#[cfg_attr(feature = "rune", rune(get, set))] Vec<IntermediateMaterialProperty>),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Color4(#[cfg_attr(feature = "rune", rune(get, set))] Vec<IntermediateMaterialProperty>),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	CullingMode(#[cfg_attr(feature = "rune", rune(get, set))] String),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	DecalBlendDiffuse(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	DecalBlendEmission(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	DecalBlendNormal(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	DecalBlendRoughness(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	DecalBlendSpecular(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Enabled(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	FogEnabled(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	FloatValue(#[cfg_attr(feature = "rune", rune(get, set))] Vec<IntermediateMaterialProperty>),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Instance(#[cfg_attr(feature = "rune", rune(get, set))] Vec<IntermediateMaterialProperty>),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Name(#[cfg_attr(feature = "rune", rune(get, set))] String),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Opacity(#[cfg_attr(feature = "rune", rune(get, set))] f32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	RenderState(#[cfg_attr(feature = "rune", rune(get, set))] Vec<IntermediateMaterialProperty>),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	SubsurfaceValue(#[cfg_attr(feature = "rune", rune(get, set))] f32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	SubsurfaceBlue(#[cfg_attr(feature = "rune", rune(get, set))] f32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	SubsurfaceGreen(#[cfg_attr(feature = "rune", rune(get, set))] f32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	SubsurfaceRed(#[cfg_attr(feature = "rune", rune(get, set))] f32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Tags(#[cfg_attr(feature = "rune", rune(get, set))] String),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Texture(#[cfg_attr(feature = "rune", rune(get, set))] Vec<IntermediateMaterialProperty>),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	TilingU(#[cfg_attr(feature = "rune", rune(get, set))] String),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	TilingV(#[cfg_attr(feature = "rune", rune(get, set))] String),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	TextureID(#[cfg_attr(feature = "rune", rune(get, set))] Option<RuntimeID>),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Type(#[cfg_attr(feature = "rune", rune(get, set))] String),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Value(#[cfg_attr(feature = "rune", rune(get, set))] FloatVal),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	ZBias(#[cfg_attr(feature = "rune", rune(get, set))] u32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	ZOffset(#[cfg_attr(feature = "rune", rune(get, set))] f32)
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum FloatVal {
-	Single(f32),
-	Vector(Vec<f32>)
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Single(#[cfg_attr(feature = "rune", rune(get, set))] f32),
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
+	Vector(#[cfg_attr(feature = "rune", rune(get, set))] Vec<f32>)
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
 pub struct MaterialInstance {
 	pub id: RuntimeID,
 
@@ -529,11 +701,24 @@ pub struct MaterialInstance {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum MaterialType {
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	Standard,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	StandardLinked,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	StandardWeighted,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	SpriteParticleAO,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	SpriteParticleVelocity
 }
 
@@ -566,6 +751,10 @@ impl Display for MaterialType {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
 pub struct ClassFlags {
 	#[cfg_attr(feature = "serde", serde(rename = "reflection2D"))]
 	#[cfg_attr(feature = "serde", serde(default))]
@@ -797,6 +986,10 @@ impl ClassFlags {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
 pub struct InstanceFlags {
 	#[cfg_attr(feature = "serde", serde(default))]
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "std::ops::Not::not"))]
@@ -959,14 +1152,61 @@ impl InstanceFlags {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(
+	feature = "rune",
+	rune_functions(
+		Self::r_get_properties,
+		Self::r_set_properties,
+		Self::r_get_property,
+		Self::r_insert_property,
+		Self::r_remove_property
+	)
+)]
 pub struct Binder {
+	#[cfg_attr(feature = "rune", rune(get, set))]
 	pub render_state: RenderState,
+
 	pub properties: IndexMap<String, MaterialPropertyValue>
+}
+
+#[cfg(feature = "rune")]
+impl Binder {
+	#[rune::function(instance, path = Self::get_properties)]
+	fn r_get_properties(&self) -> Vec<(String, MaterialPropertyValue)> {
+		self.properties.clone().into_iter().collect()
+	}
+
+	#[rune::function(instance, path = Self::set_properties)]
+	fn r_set_properties(&mut self, properties: Vec<(String, MaterialPropertyValue)>) {
+		self.properties = properties.into_iter().collect();
+	}
+
+	#[rune::function(instance, path = Self::get_property)]
+	fn r_get_property(&self, name: String) -> Option<MaterialPropertyValue> {
+		self.properties.get(&name).cloned()
+	}
+
+	#[rune::function(instance, path = Self::insert_property)]
+	fn r_insert_property(&mut self, name: String, value: MaterialPropertyValue) {
+		self.properties.insert(name, value);
+	}
+
+	#[rune::function(instance, path = Self::remove_property)]
+	fn r_remove_property(&mut self, name: String) -> Option<MaterialPropertyValue> {
+		self.properties.shift_remove(&name)
+	}
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
 pub struct RenderState {
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "is_default_renderstate"))]
 	#[cfg_attr(feature = "serde", serde(default = "default_renderstate"))]
@@ -1039,9 +1279,18 @@ fn default_renderstate() -> Option<String> {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum CullingMode {
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	DontCare,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	OneSided,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	TwoSided
 }
 
@@ -1070,12 +1319,27 @@ impl Display for CullingMode {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum BlendMode {
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	Add,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	Sub,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	Trans,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	TransOnOpaque,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	Opaque,
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	TransPremultipliedAlpha
 }
 
@@ -1111,34 +1375,60 @@ impl Display for BlendMode {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
+#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
+#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune(constructor))]
 pub enum MaterialPropertyValue {
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	Float {
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		enabled: bool,
+
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		value: f32
 	},
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	Vector {
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		enabled: bool,
+
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		value: Vec<f32>
 	},
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	Texture {
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		enabled: bool,
+
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		value: Option<RuntimeID>,
 
 		#[cfg_attr(feature = "serde", serde(rename = "tilingU"))]
 		#[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
 		#[cfg_attr(feature = "serde", serde(default))]
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		tiling_u: String,
 
 		#[cfg_attr(feature = "serde", serde(rename = "tilingV"))]
 		#[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
 		#[cfg_attr(feature = "serde", serde(default))]
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		tiling_v: String,
 
 		#[cfg_attr(feature = "serde", serde(rename = "type"))]
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		texture_type: String
 	},
+
+	#[cfg_attr(feature = "rune", rune(constructor))]
 	Colour {
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		enabled: bool,
+
+		#[cfg_attr(feature = "rune", rune(get, set))]
 		value: String
 	}
 }
