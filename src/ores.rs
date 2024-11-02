@@ -41,11 +41,10 @@ pub enum OresError {
 	HexError(#[from] hex::FromHexError)
 }
 
-/// Returns a Vec to support indexing in Rune.
 #[cfg(feature = "rune")]
 #[rune::function(path = parse_hashes_ores)]
 #[try_fn]
-fn r_parse_hashes_ores(bin_data: &[u8]) -> Result<Vec<(String, String)>> {
+fn r_parse_hashes_ores(bin_data: &[u8]) -> Result<HashMap<String, String>> {
 	parse_hashes_ores(bin_data)?.into_iter().collect()
 }
 
@@ -148,7 +147,7 @@ fn offset_of_string(values: &[&String], cur_value: usize) -> usize {
 
 #[cfg(feature = "rune")]
 #[rune::function(path = serialise_hashes_ores)]
-fn r_serialise_hashes_ores(data: Vec<(String, String)>) -> Result<Vec<u8>> {
+fn r_serialise_hashes_ores(data: HashMap<String, String>) -> Result<Vec<u8>> {
 	serialise_hashes_ores(&data.into_iter().collect())
 }
 

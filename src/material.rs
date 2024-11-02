@@ -100,18 +100,9 @@ pub enum MaterialError {
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
 #[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
-#[cfg_attr(
-	feature = "rune",
-	rune_functions(
-		Self::parse__meta,
-		Self::generate__meta,
-		Self::r_get_overrides,
-		Self::r_set_overrides,
-		Self::r_get_override,
-		Self::r_insert_override,
-		Self::r_remove_override
-	)
-)]
+#[cfg_attr(feature = "rune", rune_functions(Self::parse__meta, Self::generate__meta))]
+#[cfg_attr(feature = "rune", rune(install_with = Self::rune_install))]
+#[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct MaterialEntity {
 	#[cfg_attr(feature = "rune", rune(get, set))]
 	pub factory: RuntimeID,
@@ -127,29 +118,34 @@ pub struct MaterialEntity {
 
 #[cfg(feature = "rune")]
 impl MaterialEntity {
-	#[rune::function(instance, path = Self::get_overrides)]
-	fn r_get_overrides(&self) -> Vec<(String, MaterialOverride)> {
-		self.overrides.clone().into_iter().collect()
+	fn rune_construct(
+		factory: RuntimeID,
+		blueprint: RuntimeID,
+		material: RuntimeID,
+		overrides: HashMap<String, MaterialOverride>
+	) -> Self {
+		Self {
+			factory,
+			blueprint,
+			material,
+			overrides: overrides.into_iter().collect()
+		}
 	}
 
-	#[rune::function(instance, path = Self::set_overrides)]
-	fn r_set_overrides(&mut self, overrides: Vec<(String, MaterialOverride)>) {
-		self.overrides = overrides.into_iter().collect();
-	}
+	fn rune_install(module: &mut rune::Module) -> Result<(), rune::ContextError> {
+		module.field_function(rune::runtime::Protocol::GET, "overrides", |s: &Self| {
+			s.overrides.to_owned().map(|x| x.into_iter().collect::<HashMap<_, _>>())
+		})?;
 
-	#[rune::function(instance, path = Self::get_override)]
-	fn r_get_override(&self, key: &str) -> Option<MaterialOverride> {
-		self.overrides.get(key).cloned()
-	}
+		module.field_function(
+			rune::runtime::Protocol::SET,
+			"overrides",
+			|s: &mut Self, value: Option<HashMap<(String, MaterialOverride)>>| {
+				s.overrides = value.map(|x| x.into_iter().collect());
+			}
+		)?;
 
-	#[rune::function(instance, path = Self::insert_override)]
-	fn r_insert_override(&mut self, key: String, value: MaterialOverride) {
-		self.overrides.insert(key, value);
-	}
-
-	#[rune::function(instance, path = Self::remove_override)]
-	fn r_remove_override(&mut self, key: &str) {
-		self.overrides.shift_remove(key);
+		Ok(())
 	}
 }
 
@@ -1155,16 +1151,8 @@ impl InstanceFlags {
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
 #[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
-#[cfg_attr(
-	feature = "rune",
-	rune_functions(
-		Self::r_get_properties,
-		Self::r_set_properties,
-		Self::r_get_property,
-		Self::r_insert_property,
-		Self::r_remove_property
-	)
-)]
+#[cfg_attr(feature = "rune", rune(install_with = Self::rune_install))]
+#[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct Binder {
 	#[cfg_attr(feature = "rune", rune(get, set))]
 	pub render_state: RenderState,
@@ -1174,29 +1162,27 @@ pub struct Binder {
 
 #[cfg(feature = "rune")]
 impl Binder {
-	#[rune::function(instance, path = Self::get_properties)]
-	fn r_get_properties(&self) -> Vec<(String, MaterialPropertyValue)> {
-		self.properties.clone().into_iter().collect()
+	fn rune_construct(render_state: RenderState, properties: HashMap<String, MaterialPropertyValue>) -> Self {
+		Self {
+			render_state,
+			properties: properties.into_iter().collect()
+		}
 	}
 
-	#[rune::function(instance, path = Self::set_properties)]
-	fn r_set_properties(&mut self, properties: Vec<(String, MaterialPropertyValue)>) {
-		self.properties = properties.into_iter().collect();
-	}
+	fn rune_install(module: &mut rune::Module) -> Result<(), rune::ContextError> {
+		module.field_function(rune::runtime::Protocol::GET, "properties", |s: &Self| {
+			s.properties.clone().into_iter().collect::<Vec<_>>()
+		})?;
 
-	#[rune::function(instance, path = Self::get_property)]
-	fn r_get_property(&self, name: String) -> Option<MaterialPropertyValue> {
-		self.properties.get(&name).cloned()
-	}
+		module.field_function(
+			rune::runtime::Protocol::SET,
+			"properties",
+			|s: &mut Self, properties: Vec<(String, MaterialPropertyValue)>| {
+				s.properties = properties.into_iter().collect();
+			}
+		)?;
 
-	#[rune::function(instance, path = Self::insert_property)]
-	fn r_insert_property(&mut self, name: String, value: MaterialPropertyValue) {
-		self.properties.insert(name, value);
-	}
-
-	#[rune::function(instance, path = Self::remove_property)]
-	fn r_remove_property(&mut self, name: String) -> Option<MaterialPropertyValue> {
-		self.properties.shift_remove(&name)
+		Ok(())
 	}
 }
 
