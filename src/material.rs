@@ -1,4 +1,5 @@
 use std::{
+	collections::HashMap,
 	fmt::Display,
 	io::{Cursor, Read, Seek, SeekFrom},
 	num::ParseIntError,
@@ -134,14 +135,14 @@ impl MaterialEntity {
 
 	fn rune_install(module: &mut rune::Module) -> Result<(), rune::ContextError> {
 		module.field_function(rune::runtime::Protocol::GET, "overrides", |s: &Self| {
-			s.overrides.to_owned().map(|x| x.into_iter().collect::<HashMap<_, _>>())
+			s.overrides.clone().into_iter().collect::<HashMap<_, _>>()
 		})?;
 
 		module.field_function(
 			rune::runtime::Protocol::SET,
 			"overrides",
-			|s: &mut Self, value: Option<HashMap<(String, MaterialOverride)>>| {
-				s.overrides = value.map(|x| x.into_iter().collect());
+			|s: &mut Self, value: HashMap<String, MaterialOverride>| {
+				s.overrides = value.into_iter().collect();
 			}
 		)?;
 

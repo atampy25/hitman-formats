@@ -1,6 +1,7 @@
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
 use indexmap::IndexMap;
+use std::collections::HashMap;
 use thiserror::Error;
 use tryvial::try_fn;
 
