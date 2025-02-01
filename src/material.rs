@@ -6,7 +6,7 @@ use std::{
 	str::FromStr
 };
 
-use hitman_commons::metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID};
+use hitman_commons::metadata::{PathedID, ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference};
 use indexmap::IndexMap;
 use thiserror::Error;
 use tryvial::try_fn;
@@ -65,9 +65,6 @@ pub enum MaterialError {
 	#[error("incorrect type pairing: {0} is not type {1}")]
 	IncorrectType(String, u8),
 
-	#[error("invalid runtime ID: {0}")]
-	InvalidRuntimeID(#[from] hitman_commons::metadata::FromU64Error),
-
 	#[error("instance not top-level")]
 	InstanceNotTopLevel,
 
@@ -106,13 +103,13 @@ pub enum MaterialError {
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct MaterialEntity {
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub factory: RuntimeID,
+	pub factory: PathedID,
 
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub blueprint: RuntimeID,
+	pub blueprint: PathedID,
 
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub material: RuntimeID,
+	pub material: PathedID,
 
 	pub overrides: IndexMap<String, MaterialOverride>
 }
@@ -120,9 +117,9 @@ pub struct MaterialEntity {
 #[cfg(feature = "rune")]
 impl MaterialEntity {
 	fn rune_construct(
-		factory: RuntimeID,
-		blueprint: RuntimeID,
-		material: RuntimeID,
+		factory: PathedID,
+		blueprint: PathedID,
+		material: PathedID,
 		overrides: HashMap<String, MaterialOverride>
 	) -> Self {
 		Self {
@@ -160,7 +157,7 @@ impl MaterialEntity {
 #[cfg_attr(feature = "rune", rune(constructor))]
 pub enum MaterialOverride {
 	#[cfg_attr(feature = "rune", rune(constructor))]
-	Texture(#[cfg_attr(feature = "rune", rune(get, set))] Option<RuntimeID>),
+	Texture(#[cfg_attr(feature = "rune", rune(get, set))] Option<PathedID>),
 
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Color(#[cfg_attr(feature = "rune", rune(get, set))] String),
@@ -245,6 +242,7 @@ impl MaterialEntity {
 										)
 									})?
 									.resource
+									.to_owned()
 							))
 						} else {
 							MaterialOverride::Texture(None)
@@ -402,13 +400,14 @@ impl MaterialEntity {
 		}
 
 		Self {
-			factory: matt_metadata.id,
-			blueprint: matb_metadata.id,
+			factory: matt_metadata.id.to_owned(),
+			blueprint: matb_metadata.id.to_owned(),
 			material: matt_metadata
 				.references
 				.get(2)
 				.ok_or(MaterialError::InvalidDependency(2))?
-				.resource,
+				.resource
+				.to_owned(),
 			overrides: properties.into_iter().collect()
 		}
 	}
@@ -426,7 +425,7 @@ impl MaterialEntity {
 				flags: ReferenceFlags::default()
 			},
 			ResourceReference {
-				resource: self.blueprint,
+				resource: self.blueprint.to_owned(),
 				flags: ReferenceFlags::default()
 			},
 			ResourceReference {
@@ -640,7 +639,7 @@ pub enum IntermediateMaterialProperty {
 	TilingV(#[cfg_attr(feature = "rune", rune(get, set))] String),
 
 	#[cfg_attr(feature = "rune", rune(constructor))]
-	TextureID(#[cfg_attr(feature = "rune", rune(get, set))] Option<RuntimeID>),
+	TextureID(#[cfg_attr(feature = "rune", rune(get, set))] Option<PathedID>),
 
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Type(#[cfg_attr(feature = "rune", rune(get, set))] String),
@@ -676,7 +675,7 @@ pub enum FloatVal {
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
 #[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
 pub struct MaterialInstance {
-	pub id: RuntimeID,
+	pub id: PathedID,
 
 	pub name: String,
 
@@ -687,8 +686,8 @@ pub struct MaterialInstance {
 	#[cfg_attr(feature = "serde", serde(default))]
 	pub tags: String,
 
-	pub class: Option<RuntimeID>,
-	pub descriptor: Option<RuntimeID>,
+	pub class: Option<PathedID>,
+	pub descriptor: Option<PathedID>,
 	pub class_flags: ClassFlags,
 	pub instance_flags: InstanceFlags,
 
@@ -1391,7 +1390,7 @@ pub enum MaterialPropertyValue {
 		enabled: bool,
 
 		#[cfg_attr(feature = "rune", rune(get, set))]
-		value: Option<RuntimeID>,
+		value: Option<PathedID>,
 
 		#[cfg_attr(feature = "serde", serde(rename = "tilingU"))]
 		#[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
@@ -1493,12 +1492,18 @@ impl MaterialInstance {
 		)?)?;
 
 		Self {
-			id: mati_metadata.id,
+			id: mati_metadata.id.to_owned(),
 			name,
 			material_type: material_type.parse()?,
 			tags,
-			class: mati_metadata.references.get(mate_index as usize).map(|x| x.resource),
-			descriptor: mati_metadata.references.get(eres_index as usize).map(|x| x.resource),
+			class: mati_metadata
+				.references
+				.get(mate_index as usize)
+				.map(|x| x.resource.to_owned()),
+			descriptor: mati_metadata
+				.references
+				.get(eres_index as usize)
+				.map(|x| x.resource.to_owned()),
 			class_flags: ClassFlags::from_u32(class_flags),
 			instance_flags: InstanceFlags::from_u32(instance_flags),
 			binder
@@ -1991,6 +1996,7 @@ fn parse_material_property(
 							.get(value as usize)
 							.ok_or(MaterialError::InvalidDependency(value as usize))?
 							.resource
+							.to_owned()
 					)
 				} else {
 					None
