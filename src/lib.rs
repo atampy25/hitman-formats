@@ -7,6 +7,9 @@ pub mod ores;
 #[cfg(feature = "wwev")]
 pub mod wwev;
 
+#[cfg(feature = "sdef")]
+pub mod sdef;
+
 #[cfg(feature = "rune")]
 pub fn rune_install(ctx: &mut rune::Context) -> Result<(), rune::ContextError> {
 	#[cfg(feature = "material")]
@@ -17,6 +20,9 @@ pub fn rune_install(ctx: &mut rune::Context) -> Result<(), rune::ContextError> {
 
 	#[cfg(feature = "wwev")]
 	ctx.install(wwev::rune_module()?)?;
+
+	#[cfg(feature = "sdef")]
+	ctx.install(sdef::rune_module()?)?;
 
 	Ok(())
 }
