@@ -21,8 +21,7 @@ type Result<T, E = WwevError> = std::result::Result<T, E>;
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
-#[cfg_attr(feature = "rune", rune_derive(STRING_DISPLAY, STRING_DEBUG))]
-#[cfg_attr(feature = "rune", rune(constructor))]
+#[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
 pub enum WwevError {
 	#[error("seek error: {0}")]
 	Seek(#[from] std::io::Error),
@@ -39,7 +38,7 @@ pub enum WwevError {
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
-#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
 pub struct WwiseEvent {
 	/// The name of the event.
 	pub name: String,
@@ -53,8 +52,7 @@ pub struct WwiseEvent {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
-#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
-#[cfg_attr(feature = "rune", rune(constructor))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
 pub enum WwiseEventData {
 	/// One or more non-streamed audio objects (all data is stored directly in the WWEV).
 	#[cfg_attr(feature = "rune", rune(constructor))]
@@ -69,7 +67,7 @@ pub enum WwiseEventData {
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
-#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
 pub struct WwiseNonStreamedAudioObject {
 	pub wem_id: u32,
 	pub data: Vec<u8>
@@ -79,7 +77,7 @@ pub struct WwiseNonStreamedAudioObject {
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
-#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
 pub struct WwiseStreamedAudioObject {
 	/// The index of the WWEM dependency which contains the data for this object.
 	pub dependency_index: u32,

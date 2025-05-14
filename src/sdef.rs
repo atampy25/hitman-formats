@@ -30,8 +30,7 @@ type Result<T, E = SdefError> = std::result::Result<T, E>;
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
-#[cfg_attr(feature = "rune", rune_derive(STRING_DISPLAY, STRING_DEBUG))]
-#[cfg_attr(feature = "rune", rune(constructor))]
+#[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
 pub enum SdefError {
 	#[error("seek error: {0}")]
 	Seek(#[from] std::io::Error),
@@ -53,7 +52,7 @@ pub enum SdefError {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
-#[cfg_attr(feature = "rune", rune_derive(STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
 #[cfg_attr(feature = "rune", rune_functions(Self::parse__meta, Self::generate__meta))]
 #[cfg_attr(feature = "rune", rune(install_with = Self::rune_install))]
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
@@ -77,19 +76,19 @@ impl SoundDefinitions {
 	}
 
 	fn rune_install(module: &mut rune::Module) -> Result<(), rune::ContextError> {
-		module.field_function(rune::runtime::Protocol::GET, "id", |s: &Self| s.id.clone())?;
-		module.field_function(rune::runtime::Protocol::SET, "id", |s: &mut Self, id: PathedID| {
+		module.field_function(&rune::runtime::Protocol::GET, "id", |s: &Self| s.id.clone())?;
+		module.field_function(&rune::runtime::Protocol::SET, "id", |s: &mut Self, id: PathedID| {
 			s.id = id;
 		})?;
 
-		module.field_function(rune::runtime::Protocol::GET, "definitions", |s: &Self| {
+		module.field_function(&rune::runtime::Protocol::GET, "definitions", |s: &Self| {
 			s.definitions
 				.iter()
 				.map(|(k, v)| (k.to_string(), v.to_owned()))
 				.collect::<HashMap<_, _>>()
 		})?;
 		module.field_function(
-			rune::runtime::Protocol::SET,
+			&rune::runtime::Protocol::SET,
 			"definitions",
 			|s: &mut Self, definitions: HashMap<String, Option<PathedID>>| {
 				s.definitions = definitions
@@ -108,7 +107,7 @@ impl SoundDefinitions {
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
-#[cfg_attr(feature = "rune", rune_derive(STRING_DISPLAY, STRING_DEBUG))]
+#[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
 #[cfg_attr(
 	feature = "rune",
 	rune_functions(
@@ -120,7 +119,6 @@ impl SoundDefinitions {
 		Self::as_h1_discriminant__meta
 	)
 )]
-#[cfg_attr(feature = "rune", rune(constructor))]
 #[repr(u16)]
 pub enum SoundDefinition {
 	_NoSound,
