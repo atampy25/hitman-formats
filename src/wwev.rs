@@ -37,11 +37,11 @@ pub enum WwevError {
 }
 
 /// A Wwise event; a parsed WWEV file.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ))]
 #[cfg_attr(feature = "rune", rune(constructor))]
 pub struct WwiseEvent {
 	/// The name of the event.
@@ -56,22 +56,22 @@ pub struct WwiseEvent {
 	pub streamed: Vec<WwiseStreamedAudioObject>
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ))]
 #[cfg_attr(feature = "rune", rune(constructor))]
 pub struct WwiseNonStreamedAudioObject {
 	pub wem_id: u32,
 	pub data: Vec<u8>
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ))]
 #[cfg_attr(feature = "rune", rune(constructor))]
 pub struct WwiseStreamedAudioObject {
 	/// The index of the WWEM dependency which contains the data for this object.

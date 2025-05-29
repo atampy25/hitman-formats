@@ -52,7 +52,7 @@ pub enum SdefError {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ))]
 #[cfg_attr(feature = "rune", rune_functions(Self::parse__meta, Self::generate__meta))]
 #[cfg_attr(feature = "rune", rune(install_with = Self::rune_install))]
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
@@ -107,7 +107,7 @@ impl SoundDefinitions {
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
-#[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT, PARTIAL_EQ, EQ))]
 #[cfg_attr(
 	feature = "rune",
 	rune_functions(

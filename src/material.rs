@@ -96,7 +96,7 @@ pub enum MaterialError {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ))]
 #[cfg_attr(feature = "rune", rune_functions(Self::parse__meta, Self::generate__meta))]
 #[cfg_attr(feature = "rune", rune(install_with = Self::rune_install))]
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
@@ -152,7 +152,7 @@ impl MaterialEntity {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ))]
 pub enum MaterialOverride {
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Texture(#[cfg_attr(feature = "rune", rune(get, set))] Option<PathedID>),
@@ -548,7 +548,7 @@ impl MaterialEntity {
 
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ))]
 #[derive(Clone, Debug, PartialEq)]
 pub enum IntermediateMaterialProperty {
 	#[cfg_attr(feature = "rune", rune(constructor))]
@@ -654,7 +654,7 @@ pub enum IntermediateMaterialProperty {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ))]
 pub enum FloatVal {
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Single(#[cfg_attr(feature = "rune", rune(get, set))] f32),
@@ -669,7 +669,7 @@ pub enum FloatVal {
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ))]
 pub struct MaterialInstance {
 	pub id: PathedID,
 
@@ -695,7 +695,7 @@ pub struct MaterialInstance {
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ))]
 pub enum MaterialType {
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Standard,
@@ -745,7 +745,7 @@ impl Display for MaterialType {
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ))]
 pub struct ClassFlags {
 	#[cfg_attr(feature = "serde", serde(rename = "reflection2D"))]
 	#[cfg_attr(feature = "serde", serde(default))]
@@ -980,7 +980,7 @@ impl ClassFlags {
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ))]
 pub struct InstanceFlags {
 	#[cfg_attr(feature = "serde", serde(default))]
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "std::ops::Not::not"))]
@@ -1145,7 +1145,7 @@ impl InstanceFlags {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ))]
 #[cfg_attr(feature = "rune", rune(install_with = Self::rune_install))]
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct Binder {
@@ -1187,7 +1187,7 @@ impl Binder {
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ))]
 pub struct RenderState {
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "is_default_renderstate"))]
 	#[cfg_attr(feature = "serde", serde(default = "default_renderstate"))]
@@ -1262,7 +1262,7 @@ fn default_renderstate() -> Option<String> {
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ))]
 pub enum CullingMode {
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	DontCare,
@@ -1301,7 +1301,7 @@ impl Display for CullingMode {
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ))]
 pub enum BlendMode {
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Add,
@@ -1356,7 +1356,7 @@ impl Display for BlendMode {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ))]
 pub enum MaterialPropertyValue {
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Float {
