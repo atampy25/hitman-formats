@@ -428,7 +428,10 @@ impl MaterialEntity {
 			},
 			ResourceReference {
 				resource: self.material,
-				flags: ReferenceFlags::default()
+				flags: ReferenceFlags {
+					reference_type: ReferenceType::Normal,
+					..ReferenceFlags::default()
+				}
 			},
 		];
 
@@ -440,7 +443,10 @@ impl MaterialEntity {
 				MaterialOverride::Texture(Some(id)) => {
 					matt_references.push(ResourceReference {
 						resource: id,
-						flags: ReferenceFlags::default()
+						flags: ReferenceFlags {
+							reference_type: ReferenceType::Normal,
+							..ReferenceFlags::default()
+						}
 					});
 
 					matb.extend_from_slice(&[1]);
