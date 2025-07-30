@@ -450,13 +450,15 @@ impl MaterialEntity {
 					});
 
 					matb.extend_from_slice(&[1]);
-
 					matt.extend_from_slice(&[1]);
+
 					matt.extend_from_slice(&(matt_references.len() as u32 - 1).to_le_bytes());
 				}
 
 				MaterialOverride::Texture(None) => {
+					matb.extend_from_slice(&[1]);
 					matt.extend_from_slice(&[1]);
+
 					matt.extend_from_slice(&u32::MAX.to_le_bytes());
 				}
 
@@ -474,7 +476,9 @@ impl MaterialEntity {
 						let a =
 							u8::from_str_radix(&value.chars().skip(7).take(2).collect::<String>(), 16)? as f32 / 255.0;
 
+						matb.extend_from_slice(&[3]);
 						matt.extend_from_slice(&[3]);
+
 						matt.extend_from_slice(&r.to_le_bytes());
 						matt.extend_from_slice(&g.to_le_bytes());
 						matt.extend_from_slice(&b.to_le_bytes());
@@ -489,7 +493,9 @@ impl MaterialEntity {
 						let b =
 							u8::from_str_radix(&value.chars().skip(5).take(2).collect::<String>(), 16)? as f32 / 255.0;
 
+						matb.extend_from_slice(&[2]);
 						matt.extend_from_slice(&[2]);
+
 						matt.extend_from_slice(&r.to_le_bytes());
 						matt.extend_from_slice(&g.to_le_bytes());
 						matt.extend_from_slice(&b.to_le_bytes());
@@ -498,8 +504,8 @@ impl MaterialEntity {
 
 				MaterialOverride::Float(val) => {
 					matb.extend_from_slice(&[4]);
-
 					matt.extend_from_slice(&[4]);
+
 					matt.extend_from_slice(&val.to_le_bytes());
 				}
 
@@ -512,8 +518,8 @@ impl MaterialEntity {
 					};
 
 					matb.extend_from_slice(&[entry_type]);
-
 					matt.extend_from_slice(&[entry_type]);
+					
 					for value in vec {
 						matt.extend_from_slice(&value.to_le_bytes());
 					}
