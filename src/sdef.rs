@@ -1388,17 +1388,17 @@ static H1_DEFINITIONS: [SoundDefinition; 409] = [
 ];
 
 impl SoundDefinition {
-	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
+	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::from_h3_discriminant))]
 	pub fn from_h3_discriminant(discriminant: u16) -> Option<Self> {
 		Self::from_discriminant(discriminant).ok()
 	}
 
-	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
+	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::from_h2_discriminant))]
 	pub fn from_h2_discriminant(discriminant: u16) -> Option<Self> {
 		H2_DEFINITIONS.get(discriminant as usize).copied()
 	}
 
-	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
+	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::from_h1_discriminant))]
 	pub fn from_h1_discriminant(discriminant: u16) -> Option<Self> {
 		H1_DEFINITIONS.get(discriminant as usize).copied()
 	}
