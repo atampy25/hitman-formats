@@ -21,6 +21,7 @@ pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
 
 	module.ty::<SdefError>()?;
 	module.ty::<SoundDefinitions>()?;
+	module.ty::<SoundDefinition>()?;
 
 	Ok(module)
 }
@@ -42,10 +43,7 @@ pub enum SdefError {
 	InvalidDependency(usize),
 
 	#[error("unrecognised sound definition: {0}")]
-	InvalidSoundDefinition(u16),
-
-	#[error("sound definition: {0} not available in version: {1}")]
-	SoundDefinitionNotInVersion(SoundDefinition, GameVersion)
+	InvalidSoundDefinition(u16)
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -1481,10 +1479,9 @@ impl SoundDefinitions {
 		}
 	}
 
-	/// Serialise this SDEF.
-	#[try_fn]
+	/// Serialise this SDEF. Any definitions not existing in the given game version will be skipped.
 	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
-	pub fn generate(self, game_version: GameVersion) -> Result<(Vec<u8>, ResourceMetadata)> {
+	pub fn generate(self, game_version: GameVersion) -> (Vec<u8>, ResourceMetadata) {
 		let mut sdef = vec![];
 		let mut metadata = ResourceMetadata {
 			id: self.id,
@@ -1497,32 +1494,27 @@ impl SoundDefinitions {
 		sdef.extend_from_slice(&(self.definitions.len() as u32).to_le_bytes());
 
 		for (definition, dlge) in self.definitions {
-			sdef.extend_from_slice(
-				&(match game_version {
-					GameVersion::H1 => definition
-						.as_h1_discriminant()
-						.ok_or(SdefError::SoundDefinitionNotInVersion(definition, game_version))?,
-					GameVersion::H2 => definition
-						.as_h2_discriminant()
-						.ok_or(SdefError::SoundDefinitionNotInVersion(definition, game_version))?,
-					GameVersion::H3 => definition.as_h3_discriminant()
-				} as u32)
-					.to_le_bytes()
-			);
+			if let Some(discrim) = match game_version {
+				GameVersion::H1 => definition.as_h1_discriminant(),
+				GameVersion::H2 => definition.as_h2_discriminant(),
+				GameVersion::H3 => Some(definition.as_h3_discriminant())
+			} {
+				sdef.extend_from_slice(&(discrim as u32).to_le_bytes());
 
-			if let Some(dlge) = dlge {
-				metadata.references.push(ResourceReference {
-					resource: dlge,
-					flags: ReferenceFlags {
-						reference_type: ReferenceType::Normal,
-						acquired: false,
-						..Default::default()
-					}
-				});
+				if let Some(dlge) = dlge {
+					metadata.references.push(ResourceReference {
+						resource: dlge,
+						flags: ReferenceFlags {
+							reference_type: ReferenceType::Normal,
+							acquired: false,
+							..Default::default()
+						}
+					});
 
-				sdef.extend_from_slice(&(metadata.references.len() as u32 - 1).to_le_bytes());
-			} else {
-				sdef.extend_from_slice(&u32::MAX.to_le_bytes());
+					sdef.extend_from_slice(&(metadata.references.len() as u32 - 1).to_le_bytes());
+				} else {
+					sdef.extend_from_slice(&u32::MAX.to_le_bytes());
+				}
 			}
 		}
 
