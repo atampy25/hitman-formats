@@ -74,17 +74,13 @@ impl SoundDefinitions {
 	}
 
 	fn rune_install(module: &mut rune::Module) -> Result<(), rune::ContextError> {
-		module.field_function(&rune::runtime::Protocol::GET, "id", |s: &Self| s.id.clone())?;
-		module.field_function(&rune::runtime::Protocol::SET, "id", |s: &mut Self, id: PathedID| {
-			s.id = id;
-		})?;
-
 		module.field_function(&rune::runtime::Protocol::GET, "definitions", |s: &Self| {
 			s.definitions
 				.iter()
 				.map(|(k, v)| (k.to_string(), v.to_owned()))
 				.collect::<HashMap<_, _>>()
 		})?;
+
 		module.field_function(
 			&rune::runtime::Protocol::SET,
 			"definitions",
