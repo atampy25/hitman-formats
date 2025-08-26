@@ -21,7 +21,12 @@ material = []
 ores = []
 wwev = []
 sdef = ["dep:discrim", "dep:strum"]
-serde = ["dep:serde", "hitman-commons/serde", "indexmap/serde"]
+serde = [
+    "dep:serde",
+    "dep:serde_with",
+    "hitman-commons/serde",
+    "indexmap/serde",
+]
 rune = [
     "dep:rune",
     "dep:better-rune-derive",
