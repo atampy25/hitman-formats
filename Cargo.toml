@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-indexmap = "2.2.6"
-thiserror = "1.0.61"
+indexmap = "2.11.0"
+thiserror = "2.0.16"
 tryvial = "0.2.0"
 hitman-commons = { git = "https://github.com/atampy25/hitman-commons" }
 hex = "0.4.3"

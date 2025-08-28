@@ -6,7 +6,7 @@ use std::{
 	str::FromStr
 };
 
-use hitman_commons::metadata::{PathedID, ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference};
+use hitman_commons::metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID};
 use indexmap::IndexMap;
 use thiserror::Error;
 use tryvial::try_fn;
@@ -102,13 +102,13 @@ pub enum MaterialError {
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct MaterialEntity {
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub factory: PathedID,
+	pub factory: RuntimeID,
 
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub blueprint: PathedID,
+	pub blueprint: RuntimeID,
 
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub material: PathedID,
+	pub material: RuntimeID,
 
 	pub overrides: IndexMap<String, MaterialOverride>
 }
@@ -116,9 +116,9 @@ pub struct MaterialEntity {
 #[cfg(feature = "rune")]
 impl MaterialEntity {
 	fn rune_construct(
-		factory: PathedID,
-		blueprint: PathedID,
-		material: PathedID,
+		factory: RuntimeID,
+		blueprint: RuntimeID,
+		material: RuntimeID,
 		overrides: HashMap<String, MaterialOverride>
 	) -> Self {
 		Self {
@@ -155,7 +155,7 @@ impl MaterialEntity {
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 pub enum MaterialOverride {
 	#[cfg_attr(feature = "rune", rune(constructor))]
-	Texture(#[cfg_attr(feature = "rune", rune(get, set))] Option<PathedID>),
+	Texture(#[cfg_attr(feature = "rune", rune(get, set))] Option<RuntimeID>),
 
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Color(#[cfg_attr(feature = "rune", rune(get, set))] String),
@@ -519,7 +519,7 @@ impl MaterialEntity {
 
 					matb.extend_from_slice(&[entry_type]);
 					matt.extend_from_slice(&[entry_type]);
-					
+
 					for value in vec {
 						matt.extend_from_slice(&value.to_le_bytes());
 					}
@@ -648,7 +648,7 @@ pub enum IntermediateMaterialProperty {
 	TilingV(#[cfg_attr(feature = "rune", rune(get, set))] String),
 
 	#[cfg_attr(feature = "rune", rune(constructor))]
-	TextureID(#[cfg_attr(feature = "rune", rune(get, set))] Option<PathedID>),
+	TextureID(#[cfg_attr(feature = "rune", rune(get, set))] Option<RuntimeID>),
 
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Type(#[cfg_attr(feature = "rune", rune(get, set))] String),
@@ -683,7 +683,7 @@ pub enum FloatVal {
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 pub struct MaterialInstance {
-	pub id: PathedID,
+	pub id: RuntimeID,
 
 	pub name: String,
 
@@ -694,8 +694,8 @@ pub struct MaterialInstance {
 	#[cfg_attr(feature = "serde", serde(default))]
 	pub tags: String,
 
-	pub class: Option<PathedID>,
-	pub descriptor: Option<PathedID>,
+	pub class: Option<RuntimeID>,
+	pub descriptor: Option<RuntimeID>,
 	pub class_flags: ClassFlags,
 	pub instance_flags: InstanceFlags,
 
@@ -703,7 +703,10 @@ pub struct MaterialInstance {
 	pub binder: Binder
 }
 
-#[cfg_attr(feature = "serde", derive(serde_with::SerializeDisplay, serde_with::DeserializeFromStr))]
+#[cfg_attr(
+	feature = "serde",
+	derive(serde_with::SerializeDisplay, serde_with::DeserializeFromStr)
+)]
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
@@ -1394,7 +1397,7 @@ pub enum MaterialPropertyValue {
 		enabled: bool,
 
 		#[cfg_attr(feature = "rune", rune(get, set))]
-		value: Option<PathedID>,
+		value: Option<RuntimeID>,
 
 		#[cfg_attr(feature = "serde", serde(rename = "tilingU"))]
 		#[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
