@@ -1,6 +1,9 @@
 use std::io::{Cursor, Read};
 
-use hitman_commons::game::GameVersion;
+use hitman_commons::{
+	game::GameVersion,
+	metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID}
+};
 use thiserror::Error;
 use tryvial::try_fn;
 
@@ -32,28 +35,51 @@ pub enum WwevError {
 	#[error("invalid utf-8: {0}")]
 	InvalidString(#[from] std::str::Utf8Error),
 
+	#[error("no such reference at index {0}")]
+	InvalidReference(usize),
+
 	#[error("did not read the entire WWEV file")]
 	DidNotReadEntireFile
 }
 
 /// A Wwise event; a parsed WWEV file.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
-#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ, CLONE))]
-#[cfg_attr(feature = "rune", rune(constructor))]
+#[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
+#[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct WwiseEvent {
+	pub id: RuntimeID,
+
+	/// The soundbank referenced by this event.
+	pub soundbank: RuntimeID,
+
 	/// The name of the event.
 	pub name: String,
 
-	pub event_max_attenuation: u32,
+	/// The maximum distance from the audio emitter that this event is audible from (or -1).
+	pub max_attenuation_radius: f32,
 
 	/// Non-streamed audio objects (all data is stored directly in the WWEV).
 	pub non_streamed: Vec<WwiseNonStreamedAudioObject>,
 
 	/// Streamed audio objects (depending on WWEM files which contain the full data).
 	pub streamed: Vec<WwiseStreamedAudioObject>
+}
+
+#[cfg(feature = "rune")]
+impl WwiseEvent {
+	fn rune_construct(id: RuntimeID, soundbank: RuntimeID, name: String) -> Self {
+		Self {
+			id,
+			soundbank,
+			name,
+			max_attenuation_radius: -1.0,
+			non_streamed: Default::default(),
+			streamed: Default::default()
+		}
+	}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -74,10 +100,10 @@ pub struct WwiseNonStreamedAudioObject {
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune(constructor))]
 pub struct WwiseStreamedAudioObject {
-	/// The index of the WWEM dependency which contains the data for this object.
-	pub dependency_index: u32,
-
 	pub wem_id: u32,
+
+	/// The WWEM which contains the audio for this object.
+	pub source: RuntimeID,
 
 	/// Some amount of audio data included in the WWEV to aid loading.
 	pub prefetched_data: Option<Vec<u8>>
@@ -87,7 +113,7 @@ impl WwiseEvent {
 	/// Parse a WWEV.
 	#[try_fn]
 	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
-	pub fn parse(wwev_data: &[u8]) -> Result<Self> {
+	pub fn parse(wwev_data: &[u8], wwev_metadata: &ResourceMetadata) -> Result<Self> {
 		let mut wwev = Cursor::new(wwev_data);
 
 		let wwev_name_length = u32::from_le_bytes({
@@ -101,8 +127,8 @@ impl WwiseEvent {
 
 		let wwev_name = std::str::from_utf8(&wwev_name_data[0..wwev_name_data.len() - 1])?.to_owned();
 
-		// Max attenuation (seems to be big-endian for some reason)
-		let event_max_attenuation = u32::from_be_bytes({
+		// Max attenuation
+		let max_attenuation_radius = f32::from_le_bytes({
 			let mut x = [0u8; 4];
 			wwev.read_exact(&mut x)?;
 			x
@@ -114,7 +140,7 @@ impl WwiseEvent {
 			x
 		});
 
-		// In H1, there's an unknown value that seems to always be 0xFFFFFFFF before the non-streamed count
+		// In H1, there's a WavFX reference before the non-streamed count which is unused (and thus always 0xFFFFFFFF)
 		if non_streamed_count == -1 {
 			// Advance to the actual non-streamed count
 			non_streamed_count = i32::from_le_bytes({
@@ -158,7 +184,7 @@ impl WwiseEvent {
 				let mut x = [0u8; 4];
 				wwev.read_exact(&mut x)?;
 				x
-			});
+			}) as usize;
 
 			let wem_id = u32::from_le_bytes({
 				let mut x = [0u8; 4];
@@ -177,14 +203,22 @@ impl WwiseEvent {
 				wwev.read_exact(&mut prefetched_data)?;
 
 				streamed.push(WwiseStreamedAudioObject {
-					dependency_index: wem_index,
 					wem_id,
+					source: wwev_metadata
+						.references
+						.get(wem_index)
+						.ok_or(WwevError::InvalidReference(wem_index))?
+						.resource,
 					prefetched_data: Some(prefetched_data)
 				});
 			} else {
 				streamed.push(WwiseStreamedAudioObject {
-					dependency_index: wem_index,
 					wem_id,
+					source: wwev_metadata
+						.references
+						.get(wem_index)
+						.ok_or(WwevError::InvalidReference(wem_index))?
+						.resource,
 					prefetched_data: None
 				});
 			}
@@ -195,8 +229,14 @@ impl WwiseEvent {
 		}
 
 		WwiseEvent {
+			id: wwev_metadata.id,
+			soundbank: wwev_metadata
+				.references
+				.first()
+				.ok_or(WwevError::InvalidReference(0))?
+				.resource,
 			name: wwev_name,
-			event_max_attenuation,
+			max_attenuation_radius,
 			non_streamed,
 			streamed
 		}
@@ -204,8 +244,28 @@ impl WwiseEvent {
 
 	/// Serialise this WWEV.
 	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
-	pub fn generate(self, version: GameVersion) -> Vec<u8> {
+	pub fn generate(self, version: GameVersion) -> (Vec<u8>, ResourceMetadata) {
 		let mut wwev = vec![];
+
+		let wwev_meta = ResourceMetadata {
+			id: self.id,
+			resource_type: "WWEV".try_into().unwrap(),
+			compressed: ResourceMetadata::infer_compressed("WWEV".try_into().unwrap()),
+			scrambled: ResourceMetadata::infer_scrambled("WWEV".try_into().unwrap()),
+			references: [ResourceReference {
+				resource: self.soundbank,
+				flags: ReferenceFlags::default()
+			}]
+			.into_iter()
+			.chain(self.streamed.iter().map(|x| ResourceReference {
+				resource: x.source,
+				flags: ReferenceFlags {
+					reference_type: ReferenceType::Weak, // FIXME: Media type for legacy support?
+					..Default::default()
+				}
+			}))
+			.collect()
+		};
 
 		// Name
 		wwev.extend_from_slice(&(self.name.len() as u32 + 1).to_le_bytes());
@@ -213,7 +273,7 @@ impl WwiseEvent {
 		wwev.push(0);
 
 		// Max attenuation
-		wwev.extend_from_slice(&self.event_max_attenuation.to_be_bytes());
+		wwev.extend_from_slice(&self.max_attenuation_radius.to_le_bytes());
 
 		if version == GameVersion::H1 {
 			// Replicate the unknown value
@@ -233,7 +293,14 @@ impl WwiseEvent {
 		wwev.extend_from_slice(&(self.streamed.len() as u32).to_le_bytes());
 
 		for audio in self.streamed {
-			wwev.extend_from_slice(&audio.dependency_index.to_le_bytes());
+			wwev.extend_from_slice(
+				&(wwev_meta
+					.references
+					.iter()
+					.position(|x| x.resource == audio.source)
+					.unwrap() as u32)
+					.to_le_bytes()
+			);
 			wwev.extend_from_slice(&audio.wem_id.to_le_bytes());
 
 			if let Some(ref prefetched_data) = audio.prefetched_data {
@@ -244,6 +311,6 @@ impl WwiseEvent {
 			}
 		}
 
-		wwev
+		(wwev, wwev_meta)
 	}
 }
