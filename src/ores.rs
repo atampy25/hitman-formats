@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
+use hitman_commons::metadata::{FromU64Error, RuntimeID};
 use indexmap::IndexMap;
-use std::collections::HashMap;
 use thiserror::Error;
 use tryvial::try_fn;
 
@@ -37,19 +37,20 @@ pub enum OresError {
 	#[error("hashes ORES must have data")]
 	ValuesEmpty,
 
-	#[error("invalid hex hash: {0}")]
-	HexError(#[from] hex::FromHexError)
+	#[error("invalid RuntimeID: {0}")]
+	InvalidRuntimeID(#[from] FromU64Error)
 }
 
 #[cfg(feature = "rune")]
 #[rune::function(path = parse_hashes_ores)]
 #[try_fn]
-fn r_parse_hashes_ores(bin_data: &[u8]) -> Result<HashMap<String, String>> {
+fn r_parse_hashes_ores(bin_data: &[u8]) -> Result<Vec<(RuntimeID, String)>> {
 	parse_hashes_ores(bin_data)?.into_iter().collect()
 }
 
 #[try_fn]
-pub fn parse_hashes_ores(bin_data: &[u8]) -> Result<IndexMap<String, String>> {
+#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
+pub fn parse_hashes_ores(bin_data: &[u8]) -> Result<IndexMap<RuntimeID, String>> {
 	let mut data = IndexMap::new();
 
 	let mut cursor = Cursor::new(bin_data);
@@ -98,21 +99,17 @@ pub fn parse_hashes_ores(bin_data: &[u8]) -> Result<IndexMap<String, String>> {
 			x
 		};
 
-		let hash = format!(
-			"{}{}",
-			(hash_bytes[0..4]
-				.iter()
-				.rev()
-				.map(|x| format!("{:0>2X}", x))
-				.collect::<Vec<_>>()
-				.join("")),
-			(hash_bytes[4..8]
-				.iter()
-				.rev()
-				.map(|x| format!("{:0>2X}", x))
-				.collect::<Vec<_>>()
-				.join(""))
-		);
+		let hash = u64::from_be_bytes([
+			hash_bytes[3],
+			hash_bytes[2],
+			hash_bytes[1],
+			hash_bytes[0],
+			hash_bytes[7],
+			hash_bytes[6],
+			hash_bytes[5],
+			hash_bytes[4]
+		])
+		.try_into()?;
 
 		cursor.seek(SeekFrom::Start(u64::try_from(offset_of_data + 12)?))?;
 
@@ -147,13 +144,14 @@ fn offset_of_string(values: &[&String], cur_value: usize) -> usize {
 
 #[cfg(feature = "rune")]
 #[rune::function(path = serialise_hashes_ores)]
-fn r_serialise_hashes_ores(data: HashMap<String, String>) -> Result<Vec<u8>> {
+fn r_serialise_hashes_ores(data: Vec<(RuntimeID, String)>) -> Result<Vec<u8>> {
 	serialise_hashes_ores(&data.into_iter().collect())
 }
 
 #[try_fn]
-pub fn serialise_hashes_ores(data: &IndexMap<String, String>) -> Result<Vec<u8>> {
-	let (hashes, values): (Vec<_>, Vec<_>) = data.into_iter().unzip();
+#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
+pub fn serialise_hashes_ores(data: &IndexMap<RuntimeID, String>) -> Result<Vec<u8>> {
+	let (hashes, values): (Vec<RuntimeID>, Vec<_>) = data.into_iter().unzip();
 
 	let mut ores = vec![];
 	let mut cursor = Cursor::new(&mut ores);
@@ -179,17 +177,17 @@ pub fn serialise_hashes_ores(data: &IndexMap<String, String>) -> Result<Vec<u8>>
 		cursor.write_all(&i32::try_from(start_of_strings - 12 + offset_of_string(&values, i))?.to_le_bytes())?;
 		cursor.write_all(b"\x00\x00\x00\x00")?;
 
-		let hash = hex::decode(hashes[i])?;
-
-		cursor.write_all(&hex::decode(
-			hash[0..4]
-				.iter()
-				.rev()
-				.map(|x| format!("{:0>2X}", x))
-				.chain(hash[4..8].iter().rev().map(|x| format!("{:0>2X}", x)))
-				.collect::<Vec<_>>()
-				.join("")
-		)?)?;
+		let hash_bytes = hashes[i].as_u64().to_be_bytes();
+		cursor.write_all(&[
+			hash_bytes[3],
+			hash_bytes[2],
+			hash_bytes[1],
+			hash_bytes[0],
+			hash_bytes[7],
+			hash_bytes[6],
+			hash_bytes[5],
+			hash_bytes[4]
+		])?;
 	}
 
 	for (i, value) in values.iter().enumerate() {

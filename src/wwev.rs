@@ -113,6 +113,7 @@ impl WwiseEvent {
 	/// Parse a WWEV.
 	#[try_fn]
 	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
+	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
 	pub fn parse(wwev_data: &[u8], wwev_metadata: &ResourceMetadata) -> Result<Self> {
 		let mut wwev = Cursor::new(wwev_data);
 
@@ -244,6 +245,7 @@ impl WwiseEvent {
 
 	/// Serialise this WWEV.
 	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
+	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
 	pub fn generate(self, version: GameVersion) -> (Vec<u8>, ResourceMetadata) {
 		let mut wwev = vec![];
 
@@ -276,7 +278,7 @@ impl WwiseEvent {
 		wwev.extend_from_slice(&self.max_attenuation_radius.to_le_bytes());
 
 		if version == GameVersion::H1 {
-			// Replicate the unknown value
+			// WavFX reference
 			wwev.extend_from_slice(&u32::MAX.to_le_bytes());
 		}
 

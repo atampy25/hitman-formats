@@ -171,6 +171,7 @@ impl MaterialEntity {
 	/// Parse a material entity (MATT/MATB).
 	#[try_fn]
 	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
+	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
 	pub fn parse(
 		matt_data: &[u8],
 		matt_metadata: &ResourceMetadata,
@@ -413,6 +414,7 @@ impl MaterialEntity {
 	/// Generate the game binary for this material entity.
 	#[try_fn]
 	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
+	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
 	pub fn generate(self) -> Result<((Vec<u8>, ResourceMetadata), (Vec<u8>, ResourceMetadata))> {
 		let mut matt = vec![];
 		let mut matb = vec![];
