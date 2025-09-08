@@ -131,17 +131,6 @@ pub fn parse_hashes_ores(bin_data: &[u8]) -> Result<IndexMap<RuntimeID, String>>
 	data
 }
 
-fn offset_of_string(values: &[&String], cur_value: usize) -> usize {
-	let mut offset = 0;
-
-	for value in values.iter().take(cur_value) {
-		offset += 4 + value.len() + 1;
-		offset += (4 - (value.len() + 1) % 4) % 4;
-	}
-
-	offset
-}
-
 #[cfg(feature = "rune")]
 #[rune::function(path = serialise_hashes_ores)]
 fn r_serialise_hashes_ores(data: Vec<(RuntimeID, String)>) -> Result<Vec<u8>> {
@@ -158,7 +147,15 @@ pub fn serialise_hashes_ores(data: &IndexMap<RuntimeID, String>) -> Result<Vec<u
 
 	let start_of_strings = 0x30 + 0x18 * values.len();
 
-	let end_of_strings = start_of_strings + offset_of_string(&values, values.len())
+	let mut offsets = vec![0usize; values.len()];
+	let mut total_offset = 0;
+	for (i, value) in values.iter().enumerate() {
+		offsets[i] = total_offset;
+		total_offset += 4 + value.len() + 1;
+		total_offset += (4 - (value.len() + 1) % 4) % 4;
+	}
+
+	let end_of_strings = start_of_strings + total_offset
 		- (4 - (values.last().ok_or(OresError::ValuesEmpty)?.len() + 1) % 4) % 4;
 
 	cursor.write_all(b"\x42\x49\x4E\x31\x00\x08\x01\x00")?;
@@ -174,7 +171,7 @@ pub fn serialise_hashes_ores(data: &IndexMap<RuntimeID, String>) -> Result<Vec<u
 		cursor.write_all(&i32::try_from(value.len())?.to_le_bytes())?;
 		cursor.seek(SeekFrom::Current(-1))?;
 		cursor.write_all(b"\x40\x00\x00\x00\x00")?;
-		cursor.write_all(&i32::try_from(start_of_strings - 12 + offset_of_string(&values, i))?.to_le_bytes())?;
+		cursor.write_all(&i32::try_from(start_of_strings - 12 + offsets[i])?.to_le_bytes())?;
 		cursor.write_all(b"\x00\x00\x00\x00")?;
 
 		let hash_bytes = hashes[i].as_u64().to_be_bytes();
