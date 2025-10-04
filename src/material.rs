@@ -185,7 +185,7 @@ impl MaterialEntity {
 
 		let mut prop_names = vec![];
 
-		while matb.position() < (matb.get_ref().len() - 1) as u64 {
+		while matb.position() < matb.get_ref().len().saturating_sub(1) as u64 {
 			// The type field is for the property type
 			// but it doesn't matter here because all the MATB contains is the name
 			let _ = {
@@ -209,7 +209,7 @@ impl MaterialEntity {
 
 		let mut cur_entry = 0;
 
-		while matt.position() < (matt.get_ref().len() - 1) as u64 {
+		while matt.position() < matt.get_ref().len().saturating_sub(1) as u64 {
 			let entry_type = {
 				let mut x = [0u8; 1];
 				matt.read_exact(&mut x)?;
