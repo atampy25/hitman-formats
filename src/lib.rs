@@ -10,6 +10,9 @@ pub mod wwev;
 #[cfg(feature = "sdef")]
 pub mod sdef;
 
+#[cfg(feature = "texture")]
+pub mod texture;
+
 #[cfg(feature = "rune")]
 pub fn rune_install(ctx: &mut rune::Context) -> Result<(), rune::ContextError> {
 	#[cfg(feature = "material")]
@@ -23,6 +26,9 @@ pub fn rune_install(ctx: &mut rune::Context) -> Result<(), rune::ContextError> {
 
 	#[cfg(feature = "sdef")]
 	ctx.install(sdef::rune_module()?)?;
+
+	#[cfg(feature = "texture")]
+	ctx.install(texture::rune_module()?)?;
 
 	Ok(())
 }

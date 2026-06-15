@@ -114,6 +114,7 @@ impl SoundDefinitions {
 	)
 )]
 #[repr(u16)]
+#[allow(non_camel_case_types)]
 pub enum SoundDefinition {
 	_NoSound,
 	Dth_BrkNck,

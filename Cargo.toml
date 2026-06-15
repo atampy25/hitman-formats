@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-indexmap = "2.11.0"
+indexmap = "2.14.0"
 thiserror = "2.0.16"
 tryvial = "0.2.0"
 hitman-commons = { git = "https://github.com/atampy25/hitman-commons" }
@@ -12,16 +12,19 @@ hex = "0.4.3"
 serde = { version = "1.0.208", optional = true }
 rune = { git = "https://github.com/rune-rs/rune", rev = "a8c4f97", optional = true }
 better-rune-derive = { git = "https://github.com/atampy25/better-rune-derive", optional = true }
-serde_with = { version = "3.11.0", optional = true }
+serde_with = { version = "3.21.0", optional = true }
 discrim = { version = "0.1.2", optional = true }
-strum = { version = "0.27.1", features = ["derive"], optional = true }
+strum = { version = "0.28.0", features = ["derive"], optional = true }
 tracing = { version = "0.1.41", optional = true }
+glacier-texture = { version = "2.1.0", optional = true, default-features = false }
 
 [features]
 material = []
 ores = []
 wwev = []
 sdef = ["dep:discrim", "dep:strum"]
+texture = ["dep:glacier-texture"]
+
 serde = [
     "dep:serde",
     "dep:serde_with",
