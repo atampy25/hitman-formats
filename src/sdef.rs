@@ -6,9 +6,9 @@ use std::{
 };
 
 use discrim::FromDiscriminant;
-use hitman_commons::{
-	game::GameVersion,
-	metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID}
+use glacier_commons::{
+	game::GlacierGame,
+	metadata::{ReferenceFlags, ReferenceType, ResourceID, ResourceMetadata, ResourceReference}
 };
 use indexmap::IndexMap;
 use strum::EnumString;
@@ -56,14 +56,14 @@ pub enum SdefError {
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct SoundDefinitions {
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub id: RuntimeID,
+	pub id: ResourceID,
 
-	pub definitions: IndexMap<SoundDefinition, Option<RuntimeID>>
+	pub definitions: IndexMap<SoundDefinition, Option<ResourceID>>
 }
 
 #[cfg(feature = "rune")]
 impl SoundDefinitions {
-	fn rune_construct(id: RuntimeID, definitions: HashMap<String, Option<RuntimeID>>) -> Self {
+	fn rune_construct(id: ResourceID, definitions: HashMap<String, Option<ResourceID>>) -> Self {
 		Self {
 			id,
 			definitions: definitions
@@ -84,7 +84,7 @@ impl SoundDefinitions {
 		module.field_function(
 			&rune::runtime::Protocol::SET,
 			"definitions",
-			|s: &mut Self, definitions: HashMap<String, Option<RuntimeID>>| {
+			|s: &mut Self, definitions: HashMap<String, Option<ResourceID>>| {
 				s.definitions = definitions
 					.into_iter()
 					.filter_map(|(k, v)| Some((SoundDefinition::from_str(&k).ok()?, v)))
@@ -1425,7 +1425,7 @@ impl SoundDefinitions {
 	#[try_fn]
 	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
 	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-	pub fn parse(sdef_data: &[u8], sdef_metadata: &ResourceMetadata, game_version: GameVersion) -> Result<Self> {
+	pub fn parse(sdef_data: &[u8], sdef_metadata: &ResourceMetadata, game_version: GlacierGame) -> Result<Self> {
 		let mut cursor = Cursor::new(sdef_data);
 
 		let entries_count = u32::from_le_bytes({
@@ -1451,9 +1451,10 @@ impl SoundDefinitions {
 
 			definitions.insert(
 				match game_version {
-					GameVersion::H1 => SoundDefinition::from_h1_discriminant(definition as u16),
-					GameVersion::H2 => SoundDefinition::from_h2_discriminant(definition as u16),
-					GameVersion::H3 => SoundDefinition::from_h3_discriminant(definition as u16)
+					GlacierGame::H1 => SoundDefinition::from_h1_discriminant(definition as u16),
+					GlacierGame::H2 => SoundDefinition::from_h2_discriminant(definition as u16),
+					GlacierGame::H3 => SoundDefinition::from_h3_discriminant(definition as u16),
+					_ => todo!()
 				}
 				.ok_or(SdefError::InvalidSoundDefinition(definition as u16))?,
 				if dlge_index != u32::MAX {
@@ -1480,7 +1481,7 @@ impl SoundDefinitions {
 	/// Serialise this SDEF. Any definitions not existing in the given game version will be skipped.
 	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
 	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-	pub fn generate(self, game_version: GameVersion) -> (Vec<u8>, ResourceMetadata) {
+	pub fn generate(self, game_version: GlacierGame) -> (Vec<u8>, ResourceMetadata) {
 		let mut sdef = vec![];
 		let mut metadata = ResourceMetadata {
 			id: self.id,
@@ -1494,9 +1495,10 @@ impl SoundDefinitions {
 
 		for (definition, dlge) in self.definitions {
 			if let Some(discrim) = match game_version {
-				GameVersion::H1 => definition.as_h1_discriminant(),
-				GameVersion::H2 => definition.as_h2_discriminant(),
-				GameVersion::H3 => Some(definition.as_h3_discriminant())
+				GlacierGame::H1 => definition.as_h1_discriminant(),
+				GlacierGame::H2 => definition.as_h2_discriminant(),
+				GlacierGame::H3 => Some(definition.as_h3_discriminant()),
+				_ => todo!()
 			} {
 				sdef.extend_from_slice(&(discrim as u32).to_le_bytes());
 

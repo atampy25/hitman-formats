@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use hitman_commons::metadata::RuntimeID;
+use glacier_commons::metadata::ResourceID;
 
 #[cfg(feature = "rune")]
 pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
@@ -21,10 +21,10 @@ pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::texture))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, CLONE, PARTIAL_EQ, EQ))]
 pub struct TextureMetadata {
-	pub text: RuntimeID,
+	pub text: ResourceID,
 
 	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-	pub texd: Option<RuntimeID>,
+	pub texd: Option<ResourceID>,
 
 	#[cfg_attr(feature = "serde", serde(rename = "type"))]
 	pub texture_type: TextureType,

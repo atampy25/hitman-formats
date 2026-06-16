@@ -1,8 +1,8 @@
 use std::io::{Cursor, Read};
 
-use hitman_commons::{
-	game::GameVersion,
-	metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID}
+use glacier_commons::{
+	game::GlacierGame,
+	metadata::{ReferenceFlags, ReferenceType, ResourceID, ResourceMetadata, ResourceReference}
 };
 use thiserror::Error;
 use tryvial::try_fn;
@@ -50,10 +50,10 @@ pub enum WwevError {
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct WwiseEvent {
-	pub id: RuntimeID,
+	pub id: ResourceID,
 
 	/// The soundbank referenced by this event.
-	pub soundbank: RuntimeID,
+	pub soundbank: ResourceID,
 
 	/// The name of the event.
 	pub name: String,
@@ -70,7 +70,7 @@ pub struct WwiseEvent {
 
 #[cfg(feature = "rune")]
 impl WwiseEvent {
-	fn rune_construct(id: RuntimeID, soundbank: RuntimeID, name: String) -> Self {
+	fn rune_construct(id: ResourceID, soundbank: ResourceID, name: String) -> Self {
 		Self {
 			id,
 			soundbank,
@@ -103,7 +103,7 @@ pub struct WwiseStreamedAudioObject {
 	pub wem_id: u32,
 
 	/// The WWEM which contains the audio for this object.
-	pub source: RuntimeID,
+	pub source: ResourceID,
 
 	/// Some amount of audio data included in the WWEV to aid loading.
 	pub prefetched_data: Option<Vec<u8>>
@@ -246,7 +246,7 @@ impl WwiseEvent {
 	/// Serialise this WWEV.
 	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
 	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-	pub fn generate(self, version: GameVersion) -> (Vec<u8>, ResourceMetadata) {
+	pub fn generate(self, version: GlacierGame) -> (Vec<u8>, ResourceMetadata) {
 		let mut wwev = vec![];
 
 		let wwev_meta = ResourceMetadata {
@@ -277,7 +277,7 @@ impl WwiseEvent {
 		// Max attenuation
 		wwev.extend_from_slice(&self.max_attenuation_radius.to_le_bytes());
 
-		if version == GameVersion::H1 {
+		if version == GlacierGame::H1 {
 			// WavFX reference
 			wwev.extend_from_slice(&u32::MAX.to_le_bytes());
 		}

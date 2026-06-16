@@ -1,6 +1,6 @@
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
-use hitman_commons::metadata::{FromU64Error, RuntimeID};
+use glacier_commons::metadata::{FromU64Error, ResourceID};
 use indexmap::IndexMap;
 use thiserror::Error;
 use tryvial::try_fn;
@@ -37,20 +37,20 @@ pub enum OresError {
 	#[error("hashes ORES must have data")]
 	ValuesEmpty,
 
-	#[error("invalid RuntimeID: {0}")]
-	InvalidRuntimeID(#[from] FromU64Error)
+	#[error("invalid ResourceID: {0}")]
+	InvalidResourceID(#[from] FromU64Error)
 }
 
 #[cfg(feature = "rune")]
 #[rune::function(path = parse_hashes_ores)]
 #[try_fn]
-fn r_parse_hashes_ores(bin_data: &[u8]) -> Result<Vec<(RuntimeID, String)>> {
+fn r_parse_hashes_ores(bin_data: &[u8]) -> Result<Vec<(ResourceID, String)>> {
 	parse_hashes_ores(bin_data)?.into_iter().collect()
 }
 
 #[try_fn]
 #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-pub fn parse_hashes_ores(bin_data: &[u8]) -> Result<IndexMap<RuntimeID, String>> {
+pub fn parse_hashes_ores(bin_data: &[u8]) -> Result<IndexMap<ResourceID, String>> {
 	let mut data = IndexMap::new();
 
 	let mut cursor = Cursor::new(bin_data);
@@ -133,14 +133,14 @@ pub fn parse_hashes_ores(bin_data: &[u8]) -> Result<IndexMap<RuntimeID, String>>
 
 #[cfg(feature = "rune")]
 #[rune::function(path = serialise_hashes_ores)]
-fn r_serialise_hashes_ores(data: Vec<(RuntimeID, String)>) -> Result<Vec<u8>> {
+fn r_serialise_hashes_ores(data: Vec<(ResourceID, String)>) -> Result<Vec<u8>> {
 	serialise_hashes_ores(&data.into_iter().collect())
 }
 
 #[try_fn]
 #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-pub fn serialise_hashes_ores(data: &IndexMap<RuntimeID, String>) -> Result<Vec<u8>> {
-	let (hashes, values): (Vec<RuntimeID>, Vec<_>) = data.into_iter().unzip();
+pub fn serialise_hashes_ores(data: &IndexMap<ResourceID, String>) -> Result<Vec<u8>> {
+	let (hashes, values): (Vec<ResourceID>, Vec<_>) = data.into_iter().unzip();
 
 	let mut ores = vec![];
 	let mut cursor = Cursor::new(&mut ores);
@@ -155,8 +155,8 @@ pub fn serialise_hashes_ores(data: &IndexMap<RuntimeID, String>) -> Result<Vec<u
 		total_offset += (4 - (value.len() + 1) % 4) % 4;
 	}
 
-	let end_of_strings = start_of_strings + total_offset
-		- (4 - (values.last().ok_or(OresError::ValuesEmpty)?.len() + 1) % 4) % 4;
+	let end_of_strings =
+		start_of_strings + total_offset - (4 - (values.last().ok_or(OresError::ValuesEmpty)?.len() + 1) % 4) % 4;
 
 	cursor.write_all(b"\x42\x49\x4E\x31\x00\x08\x01\x00")?;
 	cursor.write_all(&(i32::try_from(end_of_strings)? - 0x10).to_be_bytes())?;
