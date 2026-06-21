@@ -6,7 +6,7 @@ use std::{
 	str::FromStr
 };
 
-use glacier_commons::metadata::{ReferenceFlags, ReferenceType, ResourceID, ResourceMetadata, ResourceReference};
+use glacier_commons::metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID};
 use indexmap::IndexMap;
 use thiserror::Error;
 use tryvial::try_fn;
@@ -102,13 +102,13 @@ pub enum MaterialError {
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct MaterialEntity {
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub factory: ResourceID,
+	pub factory: RuntimeID,
 
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub blueprint: ResourceID,
+	pub blueprint: RuntimeID,
 
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub material: ResourceID,
+	pub material: RuntimeID,
 
 	pub overrides: IndexMap<String, MaterialOverride>
 }
@@ -116,9 +116,9 @@ pub struct MaterialEntity {
 #[cfg(feature = "rune")]
 impl MaterialEntity {
 	fn rune_construct(
-		factory: ResourceID,
-		blueprint: ResourceID,
-		material: ResourceID,
+		factory: RuntimeID,
+		blueprint: RuntimeID,
+		material: RuntimeID,
 		overrides: HashMap<String, MaterialOverride>
 	) -> Self {
 		Self {
@@ -155,7 +155,7 @@ impl MaterialEntity {
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 pub enum MaterialOverride {
 	#[cfg_attr(feature = "rune", rune(constructor))]
-	Texture(#[cfg_attr(feature = "rune", rune(get, set))] Option<ResourceID>),
+	Texture(#[cfg_attr(feature = "rune", rune(get, set))] Option<RuntimeID>),
 
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Color(#[cfg_attr(feature = "rune", rune(get, set))] String),
@@ -650,7 +650,7 @@ pub enum IntermediateMaterialProperty {
 	TilingV(#[cfg_attr(feature = "rune", rune(get, set))] String),
 
 	#[cfg_attr(feature = "rune", rune(constructor))]
-	TextureID(#[cfg_attr(feature = "rune", rune(get, set))] Option<ResourceID>),
+	TextureID(#[cfg_attr(feature = "rune", rune(get, set))] Option<RuntimeID>),
 
 	#[cfg_attr(feature = "rune", rune(constructor))]
 	Type(#[cfg_attr(feature = "rune", rune(get, set))] String),
@@ -685,7 +685,7 @@ pub enum FloatVal {
 #[cfg_attr(feature = "rune", rune(item = ::hitman_formats::material))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 pub struct MaterialInstance {
-	pub id: ResourceID,
+	pub id: RuntimeID,
 
 	pub name: String,
 
@@ -696,8 +696,8 @@ pub struct MaterialInstance {
 	#[cfg_attr(feature = "serde", serde(default))]
 	pub tags: String,
 
-	pub class: Option<ResourceID>,
-	pub descriptor: Option<ResourceID>,
+	pub class: Option<RuntimeID>,
+	pub descriptor: Option<RuntimeID>,
 	pub class_flags: ClassFlags,
 	pub instance_flags: InstanceFlags,
 
@@ -1399,7 +1399,7 @@ pub enum MaterialPropertyValue {
 		enabled: bool,
 
 		#[cfg_attr(feature = "rune", rune(get, set))]
-		value: Option<ResourceID>,
+		value: Option<RuntimeID>,
 
 		#[cfg_attr(feature = "serde", serde(rename = "tilingU"))]
 		#[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]

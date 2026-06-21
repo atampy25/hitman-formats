@@ -8,7 +8,7 @@ use std::{
 use discrim::FromDiscriminant;
 use glacier_commons::{
 	game::GlacierGame,
-	metadata::{ReferenceFlags, ReferenceType, ResourceID, ResourceMetadata, ResourceReference}
+	metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID}
 };
 use indexmap::IndexMap;
 use strum::EnumString;
@@ -56,14 +56,14 @@ pub enum SdefError {
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct SoundDefinitions {
 	#[cfg_attr(feature = "rune", rune(get, set))]
-	pub id: ResourceID,
+	pub id: RuntimeID,
 
-	pub definitions: IndexMap<SoundDefinition, Option<ResourceID>>
+	pub definitions: IndexMap<SoundDefinition, Option<RuntimeID>>
 }
 
 #[cfg(feature = "rune")]
 impl SoundDefinitions {
-	fn rune_construct(id: ResourceID, definitions: HashMap<String, Option<ResourceID>>) -> Self {
+	fn rune_construct(id: RuntimeID, definitions: HashMap<String, Option<RuntimeID>>) -> Self {
 		Self {
 			id,
 			definitions: definitions
@@ -84,7 +84,7 @@ impl SoundDefinitions {
 		module.field_function(
 			&rune::runtime::Protocol::SET,
 			"definitions",
-			|s: &mut Self, definitions: HashMap<String, Option<ResourceID>>| {
+			|s: &mut Self, definitions: HashMap<String, Option<RuntimeID>>| {
 				s.definitions = definitions
 					.into_iter()
 					.filter_map(|(k, v)| Some((SoundDefinition::from_str(&k).ok()?, v)))

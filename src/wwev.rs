@@ -2,7 +2,7 @@ use std::io::{Cursor, Read};
 
 use glacier_commons::{
 	game::GlacierGame,
-	metadata::{ReferenceFlags, ReferenceType, ResourceID, ResourceMetadata, ResourceReference}
+	metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID}
 };
 use thiserror::Error;
 use tryvial::try_fn;
@@ -50,10 +50,10 @@ pub enum WwevError {
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct WwiseEvent {
-	pub id: ResourceID,
+	pub id: RuntimeID,
 
 	/// The soundbank referenced by this event.
-	pub soundbank: ResourceID,
+	pub soundbank: RuntimeID,
 
 	/// The name of the event.
 	pub name: String,
@@ -70,7 +70,7 @@ pub struct WwiseEvent {
 
 #[cfg(feature = "rune")]
 impl WwiseEvent {
-	fn rune_construct(id: ResourceID, soundbank: ResourceID, name: String) -> Self {
+	fn rune_construct(id: RuntimeID, soundbank: RuntimeID, name: String) -> Self {
 		Self {
 			id,
 			soundbank,
@@ -103,7 +103,7 @@ pub struct WwiseStreamedAudioObject {
 	pub wem_id: u32,
 
 	/// The WWEM which contains the audio for this object.
-	pub source: ResourceID,
+	pub source: RuntimeID,
 
 	/// Some amount of audio data included in the WWEV to aid loading.
 	pub prefetched_data: Option<Vec<u8>>
