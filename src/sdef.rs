@@ -1,13 +1,12 @@
 use std::{
 	collections::HashMap,
-	fmt::Display,
 	io::{Cursor, Read},
 	str::FromStr
 };
 
 use discrim::FromDiscriminant;
-use hitman_commons::{
-	game::GameVersion,
+use glacier_commons::{
+	game::GlacierGame,
 	metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID}
 };
 use indexmap::IndexMap;
@@ -17,7 +16,7 @@ use tryvial::try_fn;
 
 #[cfg(feature = "rune")]
 pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
-	let mut module = rune::Module::with_crate_item("hitman_formats", ["sdef"])?;
+	let mut module = rune::Module::with_crate_item("glacier_formats", ["sdef"])?;
 
 	module.ty::<SdefError>()?;
 	module.ty::<SoundDefinitions>()?;
@@ -30,7 +29,7 @@ type Result<T, E = SdefError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::sdef))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
 pub enum SdefError {
 	#[error("seek error: {0}")]
@@ -39,17 +38,23 @@ pub enum SdefError {
 	#[error("invalid number: {0}")]
 	InvalidNumber(#[from] std::num::TryFromIntError),
 
+	#[error("invalid utf-8: {0}")]
+	InvalidString(#[from] std::str::Utf8Error),
+
 	#[error("no such dependency index: {0}")]
 	InvalidDependency(usize),
 
 	#[error("unrecognised sound definition: {0}")]
-	InvalidSoundDefinition(u16)
+	InvalidSoundDefinition(u16),
+
+	#[error("unknown sound definition: {0}")]
+	UnknownSoundDefinition(String)
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::sdef))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune_functions(Self::parse__meta, Self::generate__meta))]
 #[cfg_attr(feature = "rune", rune(install_with = Self::rune_install))]
@@ -58,18 +63,20 @@ pub struct SoundDefinitions {
 	#[cfg_attr(feature = "rune", rune(get, set))]
 	pub id: RuntimeID,
 
-	pub definitions: IndexMap<SoundDefinition, Option<RuntimeID>>
+	#[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+	#[cfg_attr(feature = "rune", rune(get, set))]
+	pub name: Option<String>,
+
+	pub definitions: IndexMap<String, Option<RuntimeID>>
 }
 
 #[cfg(feature = "rune")]
 impl SoundDefinitions {
-	fn rune_construct(id: RuntimeID, definitions: HashMap<String, Option<RuntimeID>>) -> Self {
+	fn rune_construct(id: RuntimeID, name: Option<String>, definitions: HashMap<String, Option<RuntimeID>>) -> Self {
 		Self {
 			id,
-			definitions: definitions
-				.into_iter()
-				.filter_map(|(k, v)| Some((SoundDefinition::from_str(&k).ok()?, v)))
-				.collect()
+			name,
+			definitions: definitions.into_iter().collect()
 		}
 	}
 
@@ -85,10 +92,7 @@ impl SoundDefinitions {
 			&rune::runtime::Protocol::SET,
 			"definitions",
 			|s: &mut Self, definitions: HashMap<String, Option<RuntimeID>>| {
-				s.definitions = definitions
-					.into_iter()
-					.filter_map(|(k, v)| Some((SoundDefinition::from_str(&k).ok()?, v)))
-					.collect();
+				s.definitions = definitions.into_iter().collect();
 			}
 		)?;
 
@@ -97,10 +101,9 @@ impl SoundDefinitions {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, FromDiscriminant, EnumString)]
-#[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, FromDiscriminant, strum::Display, EnumString)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::sdef))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT, PARTIAL_EQ, EQ, CLONE))]
 #[cfg_attr(
 	feature = "rune",
@@ -541,12 +544,6 @@ pub enum SoundDefinition {
 	InDedBdy_CivCmntPcfd,
 	InDedBdy_CivCmntPhonePcfd,
 	Gen_SocialAck
-}
-
-impl Display for SoundDefinition {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		std::fmt::Debug::fmt(&self, f)
-	}
 }
 
 static H2_DEFINITIONS: [SoundDefinition; 424] = [
@@ -1425,8 +1422,23 @@ impl SoundDefinitions {
 	#[try_fn]
 	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
 	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-	pub fn parse(sdef_data: &[u8], sdef_metadata: &ResourceMetadata, game_version: GameVersion) -> Result<Self> {
+	pub fn parse(version: GlacierGame, sdef_data: &[u8], sdef_metadata: &ResourceMetadata) -> Result<Self> {
 		let mut cursor = Cursor::new(sdef_data);
+
+		let name = if version == GlacierGame::FL {
+			let name_length = u32::from_le_bytes({
+				let mut x = [0u8; 4];
+				cursor.read_exact(&mut x)?;
+				x
+			});
+
+			let mut name_data = vec![0; name_length as usize];
+			cursor.read_exact(&mut name_data)?;
+
+			Some(std::str::from_utf8(&name_data[0..name_data.len()])?.to_owned())
+		} else {
+			None
+		};
 
 		let entries_count = u32::from_le_bytes({
 			let mut x = [0u8; 4];
@@ -1437,50 +1449,100 @@ impl SoundDefinitions {
 		let mut definitions = IndexMap::with_capacity(entries_count as usize);
 
 		for _ in 0..entries_count {
-			let definition = u32::from_le_bytes({
-				let mut x = [0u8; 4];
-				cursor.read_exact(&mut x)?;
-				x
-			});
+			if version == GlacierGame::FL {
+				let dlge_index = u32::from_le_bytes({
+					let mut x = [0u8; 4];
+					cursor.read_exact(&mut x)?;
+					x
+				});
 
-			let dlge_index = u32::from_le_bytes({
-				let mut x = [0u8; 4];
-				cursor.read_exact(&mut x)?;
-				x
-			});
+				let definition = u32::from_le_bytes({
+					let mut x = [0u8; 4];
+					cursor.read_exact(&mut x)?;
+					x
+				});
 
-			definitions.insert(
-				match game_version {
-					GameVersion::H1 => SoundDefinition::from_h1_discriminant(definition as u16),
-					GameVersion::H2 => SoundDefinition::from_h2_discriminant(definition as u16),
-					GameVersion::H3 => SoundDefinition::from_h3_discriminant(definition as u16)
-				}
-				.ok_or(SdefError::InvalidSoundDefinition(definition as u16))?,
-				if dlge_index != u32::MAX {
-					Some(
-						sdef_metadata
-							.references
-							.get(usize::try_from(dlge_index)?)
-							.ok_or_else(|| SdefError::InvalidDependency(usize::try_from(dlge_index).unwrap()))?
-							.resource
-							.to_owned()
-					)
-				} else {
-					None
-				}
-			);
+				let definition_name_length = u32::from_le_bytes({
+					let mut x = [0u8; 4];
+					cursor.read_exact(&mut x)?;
+					x
+				});
+
+				let mut definition_name_data = vec![0; definition_name_length as usize];
+				cursor.read_exact(&mut definition_name_data)?;
+
+				let definition_name =
+					std::str::from_utf8(&definition_name_data[0..definition_name_data.len()])?.to_owned();
+
+				definitions.insert(
+					format!("{definition} {definition_name}"),
+					if dlge_index != u32::MAX {
+						Some(
+							sdef_metadata
+								.references
+								.get(usize::try_from(dlge_index)?)
+								.ok_or_else(|| SdefError::InvalidDependency(usize::try_from(dlge_index).unwrap()))?
+								.resource
+								.to_owned()
+						)
+					} else {
+						None
+					}
+				);
+			} else {
+				let definition = u32::from_le_bytes({
+					let mut x = [0u8; 4];
+					cursor.read_exact(&mut x)?;
+					x
+				});
+
+				let dlge_index = u32::from_le_bytes({
+					let mut x = [0u8; 4];
+					cursor.read_exact(&mut x)?;
+					x
+				});
+
+				definitions.insert(
+					match version {
+						GlacierGame::H1 => SoundDefinition::from_h1_discriminant(definition as u16)
+							.ok_or(SdefError::InvalidSoundDefinition(definition as u16))?
+							.to_string(),
+						GlacierGame::H2 => SoundDefinition::from_h2_discriminant(definition as u16)
+							.ok_or(SdefError::InvalidSoundDefinition(definition as u16))?
+							.to_string(),
+						GlacierGame::H3 => SoundDefinition::from_h3_discriminant(definition as u16)
+							.ok_or(SdefError::InvalidSoundDefinition(definition as u16))?
+							.to_string(),
+						GlacierGame::FL => unreachable!()
+					},
+					if dlge_index != u32::MAX {
+						Some(
+							sdef_metadata
+								.references
+								.get(usize::try_from(dlge_index)?)
+								.ok_or_else(|| SdefError::InvalidDependency(usize::try_from(dlge_index).unwrap()))?
+								.resource
+								.to_owned()
+						)
+					} else {
+						None
+					}
+				);
+			}
 		}
 
 		Self {
 			id: sdef_metadata.id.to_owned(),
+			name,
 			definitions
 		}
 	}
 
 	/// Serialise this SDEF. Any definitions not existing in the given game version will be skipped.
+	#[try_fn]
 	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
 	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-	pub fn generate(self, game_version: GameVersion) -> (Vec<u8>, ResourceMetadata) {
+	pub fn generate(self, version: GlacierGame) -> Result<(Vec<u8>, ResourceMetadata)> {
 		let mut sdef = vec![];
 		let mut metadata = ResourceMetadata {
 			id: self.id,
@@ -1490,15 +1552,23 @@ impl SoundDefinitions {
 			scrambled: ResourceMetadata::infer_scrambled("SDEF".try_into().unwrap())
 		};
 
+		if version == GlacierGame::FL {
+			let name = self.name.unwrap_or_else(|| "".into());
+			sdef.extend_from_slice(&(name.len() as u32).to_le_bytes());
+			sdef.extend_from_slice(name.as_bytes());
+		}
+
 		sdef.extend_from_slice(&(self.definitions.len() as u32).to_le_bytes());
 
 		for (definition, dlge) in self.definitions {
-			if let Some(discrim) = match game_version {
-				GameVersion::H1 => definition.as_h1_discriminant(),
-				GameVersion::H2 => definition.as_h2_discriminant(),
-				GameVersion::H3 => Some(definition.as_h3_discriminant())
-			} {
-				sdef.extend_from_slice(&(discrim as u32).to_le_bytes());
+			if version == GlacierGame::FL {
+				let Some((definition, definition_name)) = definition.split_once(' ') else {
+					return Err(SdefError::UnknownSoundDefinition(definition));
+				};
+
+				let definition = definition
+					.parse::<u32>()
+					.map_err(|_| SdefError::UnknownSoundDefinition(definition.to_owned()))?;
 
 				if let Some(dlge) = dlge {
 					metadata.references.push(ResourceReference {
@@ -1513,6 +1583,43 @@ impl SoundDefinitions {
 					sdef.extend_from_slice(&(metadata.references.len() as u32 - 1).to_le_bytes());
 				} else {
 					sdef.extend_from_slice(&u32::MAX.to_le_bytes());
+				}
+
+				sdef.extend_from_slice(&definition.to_le_bytes());
+
+				sdef.extend_from_slice(&(definition_name.len() as u32).to_le_bytes());
+				sdef.extend_from_slice(definition_name.as_bytes());
+			} else {
+				if let Some(discrim) = match version {
+					GlacierGame::H1 => SoundDefinition::from_str(&definition)
+						.map_err(|_| SdefError::UnknownSoundDefinition(definition.to_owned()))?
+						.as_h1_discriminant(),
+					GlacierGame::H2 => SoundDefinition::from_str(&definition)
+						.map_err(|_| SdefError::UnknownSoundDefinition(definition.to_owned()))?
+						.as_h2_discriminant(),
+					GlacierGame::H3 => Some(
+						SoundDefinition::from_str(&definition)
+							.map_err(|_| SdefError::UnknownSoundDefinition(definition.to_owned()))?
+							.as_h3_discriminant()
+					),
+					GlacierGame::FL => unreachable!()
+				} {
+					sdef.extend_from_slice(&(discrim as u32).to_le_bytes());
+
+					if let Some(dlge) = dlge {
+						metadata.references.push(ResourceReference {
+							resource: dlge,
+							flags: ReferenceFlags {
+								reference_type: ReferenceType::Normal,
+								acquired: false,
+								..Default::default()
+							}
+						});
+
+						sdef.extend_from_slice(&(metadata.references.len() as u32 - 1).to_le_bytes());
+					} else {
+						sdef.extend_from_slice(&u32::MAX.to_le_bytes());
+					}
 				}
 			}
 		}

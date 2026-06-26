@@ -1,13 +1,13 @@
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
-use hitman_commons::metadata::{FromU64Error, RuntimeID};
+use glacier_commons::metadata::{FromU64Error, RuntimeID};
 use indexmap::IndexMap;
 use thiserror::Error;
 use tryvial::try_fn;
 
 #[cfg(feature = "rune")]
 pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
-	let mut module = rune::Module::with_crate_item("hitman_formats", ["ores"])?;
+	let mut module = rune::Module::with_crate_item("glacier_formats", ["ores"])?;
 
 	module.ty::<OresError>()?;
 	module.function_meta(r_parse_hashes_ores)?;
@@ -22,7 +22,7 @@ type Result<T, E = OresError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::ores))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::ores))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
 pub enum OresError {
 	#[error("seek error: {0}")]
@@ -155,8 +155,8 @@ pub fn serialise_hashes_ores(data: &IndexMap<RuntimeID, String>) -> Result<Vec<u
 		total_offset += (4 - (value.len() + 1) % 4) % 4;
 	}
 
-	let end_of_strings = start_of_strings + total_offset
-		- (4 - (values.last().ok_or(OresError::ValuesEmpty)?.len() + 1) % 4) % 4;
+	let end_of_strings =
+		start_of_strings + total_offset - (4 - (values.last().ok_or(OresError::ValuesEmpty)?.len() + 1) % 4) % 4;
 
 	cursor.write_all(b"\x42\x49\x4E\x31\x00\x08\x01\x00")?;
 	cursor.write_all(&(i32::try_from(end_of_strings)? - 0x10).to_be_bytes())?;

@@ -1,10 +1,10 @@
 use std::fmt::Display;
 
-use hitman_commons::metadata::RuntimeID;
+use glacier_commons::metadata::RuntimeID;
 
 #[cfg(feature = "rune")]
 pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
-	let mut module = rune::Module::with_crate_item("hitman_formats", ["texture"])?;
+	let mut module = rune::Module::with_crate_item("glacier_formats", ["texture"])?;
 
 	module.ty::<TextureMetadata>()?;
 	module.ty::<TextureType>()?;
@@ -18,7 +18,7 @@ pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::texture))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::texture))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, CLONE, PARTIAL_EQ, EQ))]
 pub struct TextureMetadata {
 	pub text: RuntimeID,
@@ -44,7 +44,7 @@ fn is_default<T: Default + PartialEq>(t: &T) -> bool {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::texture))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::texture))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT, CLONE, PARTIAL_EQ, EQ))]
 pub enum TextureType {
 	Colour,
@@ -114,7 +114,7 @@ impl From<glacier_texture::enums::TextureType> for TextureType {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::texture))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::texture))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT, CLONE, PARTIAL_EQ, EQ))]
 pub enum RenderFormat {
 	R32G32B32A32,
@@ -198,7 +198,7 @@ impl From<glacier_texture::enums::RenderFormat> for RenderFormat {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::texture))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::texture))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT, CLONE, PARTIAL_EQ, EQ))]
 pub enum InterpretAs {
 	Colour,

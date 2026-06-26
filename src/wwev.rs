@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read};
 
-use hitman_commons::{
-	game::GameVersion,
+use glacier_commons::{
+	game::GlacierGame,
 	metadata::{ReferenceFlags, ReferenceType, ResourceMetadata, ResourceReference, RuntimeID}
 };
 use thiserror::Error;
@@ -9,7 +9,7 @@ use tryvial::try_fn;
 
 #[cfg(feature = "rune")]
 pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
-	let mut module = rune::Module::with_crate_item("hitman_formats", ["wwev"])?;
+	let mut module = rune::Module::with_crate_item("glacier_formats", ["wwev"])?;
 
 	module.ty::<WwevError>()?;
 	module.ty::<WwiseEvent>()?;
@@ -23,7 +23,7 @@ type Result<T, E = WwevError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::wwev))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
 pub enum WwevError {
 	#[error("seek error: {0}")]
@@ -46,14 +46,20 @@ pub enum WwevError {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::wwev))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct WwiseEvent {
 	pub id: RuntimeID,
 
-	/// The soundbank referenced by this event.
+	/// The soundbank (WBNK) referenced by this event.
 	pub soundbank: RuntimeID,
+
+	/// The WavFX (WWFX) referenced by this event.
+	pub fx: Option<RuntimeID>,
+
+	/// The metadata (WEMD) referenced by this event.
+	pub metadata: Option<RuntimeID>,
 
 	/// The name of the event.
 	pub name: String,
@@ -74,6 +80,8 @@ impl WwiseEvent {
 		Self {
 			id,
 			soundbank,
+			fx: Default::default(),
+			metadata: Default::default(),
 			name,
 			max_attenuation_radius: -1.0,
 			non_streamed: Default::default(),
@@ -85,22 +93,29 @@ impl WwiseEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::wwev))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune(constructor))]
 pub struct WwiseNonStreamedAudioObject {
 	pub wem_id: u32,
+
+	/// Almost always the same as `wem_id`, but sometimes 0. Only present in FL.
+	pub wem_id_2: Option<u32>,
+
 	pub data: Vec<u8>
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::wwev))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune(constructor))]
 pub struct WwiseStreamedAudioObject {
 	pub wem_id: u32,
+
+	/// Almost always the same as `wem_id`, but sometimes 0. Only present in FL.
+	pub wem_id_2: Option<u32>,
 
 	/// The WWEM which contains the audio for this object.
 	pub source: RuntimeID,
@@ -114,7 +129,7 @@ impl WwiseEvent {
 	#[try_fn]
 	#[cfg_attr(feature = "rune", rune::function(keep, path = Self::parse))]
 	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-	pub fn parse(wwev_data: &[u8], wwev_metadata: &ResourceMetadata) -> Result<Self> {
+	pub fn parse(version: GlacierGame, wwev_data: &[u8], wwev_metadata: &ResourceMetadata) -> Result<Self> {
 		let mut wwev = Cursor::new(wwev_data);
 
 		let wwev_name_length = u32::from_le_bytes({
@@ -128,6 +143,14 @@ impl WwiseEvent {
 
 		let wwev_name = std::str::from_utf8(&wwev_name_data[0..wwev_name_data.len() - 1])?.to_owned();
 
+		let metadata_reference = if version == GlacierGame::FL {
+			let mut x = [0u8; 1];
+			wwev.read_exact(&mut x)?;
+			Some(x[0])
+		} else {
+			None
+		};
+
 		// Max attenuation
 		let max_attenuation_radius = f32::from_le_bytes({
 			let mut x = [0u8; 4];
@@ -135,21 +158,31 @@ impl WwiseEvent {
 			x
 		});
 
-		let mut non_streamed_count = i32::from_le_bytes({
+		let soundbank_reference = if version == GlacierGame::FL {
+			Some(u32::from_le_bytes({
+				let mut x = [0u8; 4];
+				wwev.read_exact(&mut x)?;
+				x
+			}))
+		} else {
+			None
+		};
+
+		let fx_reference = if version == GlacierGame::H1 {
+			Some(u32::from_le_bytes({
+				let mut x = [0u8; 4];
+				wwev.read_exact(&mut x)?;
+				x
+			}))
+		} else {
+			None
+		};
+
+		let non_streamed_count = i32::from_le_bytes({
 			let mut x = [0u8; 4];
 			wwev.read_exact(&mut x)?;
 			x
 		});
-
-		// In H1, there's a WavFX reference before the non-streamed count which is unused (and thus always 0xFFFFFFFF)
-		if non_streamed_count == -1 {
-			// Advance to the actual non-streamed count
-			non_streamed_count = i32::from_le_bytes({
-				let mut x = [0u8; 4];
-				wwev.read_exact(&mut x)?;
-				x
-			});
-		}
 
 		let mut non_streamed = vec![];
 
@@ -160,6 +193,17 @@ impl WwiseEvent {
 				x
 			});
 
+			let wem_id_2 = if version == GlacierGame::FL {
+				Some(u32::from_le_bytes({
+					let mut x = [0u8; 4];
+					wwev.read_exact(&mut x)?;
+					x
+				}))
+				.filter(|&x| x != wem_id)
+			} else {
+				None
+			};
+
 			let wem_size = u32::from_le_bytes({
 				let mut x = [0u8; 4];
 				wwev.read_exact(&mut x)?;
@@ -169,7 +213,11 @@ impl WwiseEvent {
 			let mut wem_data = vec![0; wem_size as usize];
 			wwev.read_exact(&mut wem_data)?;
 
-			non_streamed.push(WwiseNonStreamedAudioObject { wem_id, data: wem_data });
+			non_streamed.push(WwiseNonStreamedAudioObject {
+				wem_id,
+				wem_id_2,
+				data: wem_data
+			});
 		}
 
 		let streamed_count = u32::from_le_bytes({
@@ -193,6 +241,17 @@ impl WwiseEvent {
 				x
 			});
 
+			let wem_id_2 = if version == GlacierGame::FL {
+				Some(u32::from_le_bytes({
+					let mut x = [0u8; 4];
+					wwev.read_exact(&mut x)?;
+					x
+				}))
+				.filter(|&x| x != wem_id)
+			} else {
+				None
+			};
+
 			let prefetch_size = u32::from_le_bytes({
 				let mut x = [0u8; 4];
 				wwev.read_exact(&mut x)?;
@@ -205,6 +264,7 @@ impl WwiseEvent {
 
 				streamed.push(WwiseStreamedAudioObject {
 					wem_id,
+					wem_id_2,
 					source: wwev_metadata
 						.references
 						.get(wem_index)
@@ -215,6 +275,7 @@ impl WwiseEvent {
 			} else {
 				streamed.push(WwiseStreamedAudioObject {
 					wem_id,
+					wem_id_2,
 					source: wwev_metadata
 						.references
 						.get(wem_index)
@@ -231,11 +292,39 @@ impl WwiseEvent {
 
 		WwiseEvent {
 			id: wwev_metadata.id,
-			soundbank: wwev_metadata
-				.references
-				.first()
-				.ok_or(WwevError::InvalidReference(0))?
-				.resource,
+			soundbank: if let Some(idx) = soundbank_reference {
+				wwev_metadata
+					.references
+					.get(idx as usize)
+					.ok_or(WwevError::InvalidReference(idx as usize))?
+					.resource
+			} else {
+				wwev_metadata
+					.references
+					.first()
+					.ok_or(WwevError::InvalidReference(0))?
+					.resource
+			},
+			fx: fx_reference
+				.filter(|&idx| idx != u32::MAX)
+				.map(|idx| {
+					wwev_metadata
+						.references
+						.get(idx as usize)
+						.map(|x| x.resource)
+						.ok_or(WwevError::InvalidReference(idx as usize))
+				})
+				.transpose()?,
+			metadata: metadata_reference
+				.filter(|&idx| idx != 0)
+				.map(|idx| {
+					wwev_metadata
+						.references
+						.get(idx as usize)
+						.map(|x| x.resource)
+						.ok_or(WwevError::InvalidReference(idx as usize))
+				})
+				.transpose()?,
 			name: wwev_name,
 			max_attenuation_radius,
 			non_streamed,
@@ -246,7 +335,7 @@ impl WwiseEvent {
 	/// Serialise this WWEV.
 	#[cfg_attr(feature = "rune", rune::function(keep, instance))]
 	#[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-	pub fn generate(self, version: GameVersion) -> (Vec<u8>, ResourceMetadata) {
+	pub fn generate(self, version: GlacierGame) -> (Vec<u8>, ResourceMetadata) {
 		let mut wwev = vec![];
 
 		let wwev_meta = ResourceMetadata {
@@ -259,6 +348,36 @@ impl WwiseEvent {
 				flags: ReferenceFlags::default()
 			}]
 			.into_iter()
+			.chain(
+				if version == GlacierGame::H1
+					&& let Some(fx) = self.fx
+				{
+					vec![ResourceReference {
+						resource: fx,
+						flags: ReferenceFlags {
+							reference_type: ReferenceType::Weak, // no idea what type this should be, WavFX is unused in H1
+							..Default::default()
+						}
+					}]
+				} else {
+					vec![]
+				}
+			)
+			.chain(
+				if version == GlacierGame::FL
+					&& let Some(metadata) = self.metadata
+				{
+					vec![ResourceReference {
+						resource: metadata,
+						flags: ReferenceFlags {
+							reference_type: ReferenceType::Weak,
+							..Default::default()
+						}
+					}]
+				} else {
+					vec![]
+				}
+			)
 			.chain(self.streamed.iter().map(|x| ResourceReference {
 				resource: x.source,
 				flags: ReferenceFlags {
@@ -274,12 +393,41 @@ impl WwiseEvent {
 		wwev.extend_from_slice(self.name.as_bytes());
 		wwev.push(0);
 
+		if version == GlacierGame::FL {
+			wwev.push(if let Some(metadata) = self.metadata {
+				wwev_meta
+					.references
+					.iter()
+					.position(|x| x.resource == metadata)
+					.unwrap() as u8
+			} else {
+				0
+			});
+		}
+
 		// Max attenuation
 		wwev.extend_from_slice(&self.max_attenuation_radius.to_le_bytes());
 
-		if version == GameVersion::H1 {
+		if version == GlacierGame::H1 {
 			// WavFX reference
-			wwev.extend_from_slice(&u32::MAX.to_le_bytes());
+			wwev.extend_from_slice(
+				&if let Some(fx) = self.fx {
+					wwev_meta.references.iter().position(|x| x.resource == fx).unwrap() as u32
+				} else {
+					u32::MAX
+				}
+				.to_le_bytes()
+			);
+		} else if version == GlacierGame::FL {
+			// Soundbank reference
+			wwev.extend_from_slice(
+				&(wwev_meta
+					.references
+					.iter()
+					.position(|x| x.resource == self.soundbank)
+					.unwrap() as u32)
+					.to_le_bytes()
+			);
 		}
 
 		// Non-streamed count
@@ -287,6 +435,11 @@ impl WwiseEvent {
 
 		for audio in self.non_streamed {
 			wwev.extend_from_slice(&audio.wem_id.to_le_bytes());
+
+			if version == GlacierGame::FL {
+				wwev.extend_from_slice(&audio.wem_id_2.unwrap_or(audio.wem_id).to_le_bytes());
+			}
+
 			wwev.extend_from_slice(&(audio.data.len() as u32).to_le_bytes());
 			wwev.extend_from_slice(&audio.data);
 		}
@@ -303,7 +456,12 @@ impl WwiseEvent {
 					.unwrap() as u32)
 					.to_le_bytes()
 			);
+
 			wwev.extend_from_slice(&audio.wem_id.to_le_bytes());
+
+			if version == GlacierGame::FL {
+				wwev.extend_from_slice(&audio.wem_id_2.unwrap_or(audio.wem_id).to_le_bytes());
+			}
 
 			if let Some(ref prefetched_data) = audio.prefetched_data {
 				wwev.extend_from_slice(&(prefetched_data.len() as u32).to_le_bytes());
