@@ -7,7 +7,7 @@ use tryvial::try_fn;
 
 #[cfg(feature = "rune")]
 pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
-	let mut module = rune::Module::with_crate_item("hitman_formats", ["ores"])?;
+	let mut module = rune::Module::with_crate_item("glacier_formats", ["ores"])?;
 
 	module.ty::<OresError>()?;
 	module.function_meta(r_parse_hashes_ores)?;
@@ -22,7 +22,7 @@ type Result<T, E = OresError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::ores))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::ores))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
 pub enum OresError {
 	#[error("seek error: {0}")]

@@ -16,7 +16,7 @@ use tryvial::try_fn;
 
 #[cfg(feature = "rune")]
 pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
-	let mut module = rune::Module::with_crate_item("hitman_formats", ["sdef"])?;
+	let mut module = rune::Module::with_crate_item("glacier_formats", ["sdef"])?;
 
 	module.ty::<SdefError>()?;
 	module.ty::<SoundDefinitions>()?;
@@ -29,7 +29,7 @@ type Result<T, E = SdefError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::sdef))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
 pub enum SdefError {
 	#[error("seek error: {0}")]
@@ -54,7 +54,7 @@ pub enum SdefError {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::sdef))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune_functions(Self::parse__meta, Self::generate__meta))]
 #[cfg_attr(feature = "rune", rune(install_with = Self::rune_install))]
@@ -103,7 +103,7 @@ impl SoundDefinitions {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, FromDiscriminant, strum::Display, EnumString)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::sdef))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::sdef))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT, PARTIAL_EQ, EQ, CLONE))]
 #[cfg_attr(
 	feature = "rune",

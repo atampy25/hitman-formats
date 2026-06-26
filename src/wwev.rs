@@ -9,7 +9,7 @@ use tryvial::try_fn;
 
 #[cfg(feature = "rune")]
 pub fn rune_module() -> Result<rune::Module, rune::ContextError> {
-	let mut module = rune::Module::with_crate_item("hitman_formats", ["wwev"])?;
+	let mut module = rune::Module::with_crate_item("glacier_formats", ["wwev"])?;
 
 	module.ty::<WwevError>()?;
 	module.ty::<WwiseEvent>()?;
@@ -23,7 +23,7 @@ type Result<T, E = WwevError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::wwev))]
 #[cfg_attr(feature = "rune", rune_derive(DISPLAY_FMT, DEBUG_FMT))]
 pub enum WwevError {
 	#[error("seek error: {0}")]
@@ -46,7 +46,7 @@ pub enum WwevError {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::wwev))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune(constructor_fn = Self::rune_construct))]
 pub struct WwiseEvent {
@@ -93,7 +93,7 @@ impl WwiseEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::wwev))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune(constructor))]
 pub struct WwiseNonStreamedAudioObject {
@@ -108,7 +108,7 @@ pub struct WwiseNonStreamedAudioObject {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rune", serde_with::apply(_ => #[rune(get, set)]))]
 #[cfg_attr(feature = "rune", derive(better_rune_derive::Any))]
-#[cfg_attr(feature = "rune", rune(item = ::hitman_formats::wwev))]
+#[cfg_attr(feature = "rune", rune(item = ::glacier_formats::wwev))]
 #[cfg_attr(feature = "rune", rune_derive(DEBUG_FMT, PARTIAL_EQ, EQ, CLONE))]
 #[cfg_attr(feature = "rune", rune(constructor))]
 pub struct WwiseStreamedAudioObject {
